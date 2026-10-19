@@ -1,0 +1,12 @@
+# Netlify (alternative to GitHub Pages): self-hosts MediaPipe at build time and caches model files for a year.
+[build]
+  command = "bash scripts/fetch-vendor.sh"
+  publish = "."
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
