@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><canvas id="c"></canvas>
+<script type="module">
+  // Worst-case cost of the effect per frame (update + draw), through a full laugh sequence, per quality level.
+  import { ChainRainEffect } from '../src/effect-chain.js';
+  window.bench = (w, q, skip = '') => {
+    const c = document.getElementById('c'); c.width = w; c.height = Math.round(w * 16 / 9); const ctx = c.getContext('2d');
+    const fx = new ChainRainEffect({ width: c.width, height: c.height, quality: q, seed: 3, mood: 1 });
+    const sil = Array.from({ length: 72 }, (_, i) => { const x = (i + 0.5) / 72, d = Math.abs(x - 0.5); return d < 0.17 ? 0.33 + d * d * 4 : 0.62 + d * 0.3; });
+    fx.setFace(0.5, 0.45, 0.36, 0.2); fx.setMouth(0.5, 0.55); if (!skip.includes('sil')) fx.setSilhouette(sil); else fx.setFace(null);
+    for (const [tok, m] of [['RAIN','_drawRain'],['STARS','_drawStars'],['EMB','_drawEmbers'],['FLR','_drawFlares']]) if (skip.includes(tok)) fx[m] = () => {};
+    if (skip.includes('flash')) { const u = fx.update.bind(fx); fx.update = (d) => { u(d); fx.flashes.length = 0; fx.glows.length = 0; fx.smoke.length = 0; }; }
+    const prof = {}; for (const m of ['update', 'drawGrade', '_drawRain', '_drawStars', '_drawEmbers', '_drawFlares', '_debris']) { const f = fx[m].bind(fx); fx[m] = (...a) => { const t0 = performance.now(); const r = f(...a); prof[m] = (prof[m] || 0) + performance.now() - t0; return r; }; }
+    const times = []; let t = 0;
+    for (let i = 0; i < 30 * 10; i++) {
+      if (i === 60) fx.trigger();
+      const t0 = performance.now(); fx.update(1 / 30); ctx.fillStyle = '#444'; ctx.fillRect(0, 0, c.width, c.height); if (!skip.includes('grade')) fx.drawGrade(ctx); if (!skip.includes('nodraw')) fx.draw(ctx); ctx.getImageData(0, 0, 1, 1);
+      times.push(performance.now() - t0);
+    }
+    times.sort((a, b) => a - b);
+    return { w, q, avg: +(times.reduce((a, b) => a + b, 0) / times.length).toFixed(2), p95: +times[Math.floor(times.length * 0.95)].toFixed(2), max: +times[times.length - 1].toFixed(2), prof: Object.fromEntries(Object.entries(prof).map(([k, v]) => [k, +(v / times.length).toFixed(2)])) };
+  };
+  window.ready = true;
+</script>

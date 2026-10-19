@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>offline renderer</title>
+<style>html,body{margin:0;background:#000}</style>
+<canvas id="c"></canvas>
+<script type="module">
+  // Deterministic offline renderer used by tools/render-demo.mjs.
+  // Same effect + HUD code as the live app; the laugh timeline comes from a JSON config.
+  import { ChainRainEffect } from '../src/effect-chain.js';
+  import { drawHUD } from '../src/hud.js';
+  const c = document.getElementById('c'), ctx = c.getContext('2d');
+  const events = [];
+  let fx, cfg, fps, pulses, trig, lastImg = null;
+  const lerpKeys = (keys, t) => { if (t <= keys[0][0]) return keys[0][1]; for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) { const [a, va] = keys[i - 1], [b, vb] = keys[i]; return va + (vb - va) * (t - a) / (b - a); } return keys[keys.length - 1][1]; };
+  window.setup = (config) => {
+    cfg = config; fps = cfg.fps; c.width = cfg.out[0]; c.height = cfg.out[1];
+    fx = new ChainRainEffect({ width: c.width, height: c.height, seed: 7, mood: 0, onEvent: (type, d) => events.push({ t: +(cur / fps).toFixed(3), type, ...d }) });
+    pulses = [...cfg.pulses]; trig = cfg.trigger;
+    return { total: cfg.total };
+  };
+  let cur = 0;
+  window.step = async (i, url, grab = true) => {
+    cur = i; const t = i / fps;
+    if (url) { const b = await (await fetch(url)).blob(); lastImg = await createImageBitmap(b); }
+    const fr = cfg.frames[Math.min(i, cfg.frames.length - 1)];
+    // portrait reframe: crop a 9:16 window around the face, scale to the output
+    ctx.drawImage(lastImg, fr.cropX, 0, cfg.cropW, cfg.src[1], 0, 0, c.width, c.height);
+    fx.setMouth(fr.mouth[0], fr.mouth[1]); if (cfg.moods) fx.setMood(cfg.moods[Math.min(i, cfg.moods.length - 1)]); if (fr.face) fx.setFace(...fr.face); if (fr.sil) fx.setSilhouette(fr.sil);
+    while (pulses.length && pulses[0] <= t) { pulses.shift(); fx.pulse(1); }
+    if (trig != null && t >= trig) { fx.trigger(); trig = null; }
+    fx.update(1 / fps);
+    fx.drawGrade(ctx); fx.draw(ctx);
+    const score = cfg.scores ? cfg.scores[Math.min(i, cfg.scores.length - 1)] : lerpKeys(cfg.score, t);
+    const mood = cfg.moods ? cfg.moods[Math.min(i, cfg.moods.length - 1)] : 0;
+    const state = fx.busy ? (fx.tau < 0.8 ? 'laugh' : 'bloom') : mood > 0.12 ? 'smile' : 'still';
+    const hintAlpha = fx.busy ? 0 : Math.min(1, t / 0.6);
+    drawHUD(ctx, c.width, c.height, { score, state, threshold: 0.55, hint: state === 'smile' ? '笑出声，让雨变成烟花' : '微笑一下，开始下雨', hintAlpha: t > 8.5 && !fx.busy ? 0 : hintAlpha, time: t });
+    return { data: grab ? c.toDataURL('image/jpeg', 0.93) : null, busy: fx.busy };
+  };
+  window.getEvents = () => events;
+  window.ready = true;
+</script>
