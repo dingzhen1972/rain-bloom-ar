@@ -1,0 +1,28 @@
+# Runs the app on a test clip with the real MediaPipe models in a headless browser and checks that
+# the face is found, the laugh is detected without any manual trigger, the fireworks play and a video is exported.
+# Results (report.json, screenshots, exported video) are attached to the run as the "ar-verify" artifact.
+name: Verify AR
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch MediaPipe + models
+        run: bash scripts/fetch-vendor.sh
+      - name: Install headless Chromium
+        run: npm i --no-save playwright@1.48.2 && npx playwright install --with-deps chromium
+      - name: Play the test clip through the app
+        run: node tools/ci-verify.mjs tests/fixtures/laugh.webm ci-out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ar-verify
+          path: ci-out
