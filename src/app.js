@@ -44,6 +44,7 @@ window.__rainbloom = { fx, ctrl, detector, gov, tier, log, stats, force: () => {
 
 let stream = null, facing = 'user', running = false, lastT = 0, skipToggle = false;
 let videoEnded = false, recorder = null, chunks = [], recStart = 0, waitingFinish = false, finishing = false, objectUrl = null, resultUrl = null;
+let sessionId = 0, discardRecording = false;
 let lastSample = null, demoClock = 0, idleTime = 0, hintA = 0, bloomedOnce = false, noFace = 0, lastFaceAt = 0;
 let detectEvery = 1000 / tier.detectHz, lastDetect = -1e9, lastVideoTime = -1;
 const crop = { cx: 0.5, cy: 0.45, locked: false };
@@ -214,6 +215,7 @@ async function begin(newMode) {
 }
 
 async function startCamera() {
+  const id = ++sessionId;
   if (!window.isSecureContext) { toast('摄像头需要 https 链接打开（GitHub Pages 默认就是 https）', 6000); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast(inApp ? '当前 App 内置浏览器不支持摄像头，请点右上角「在浏览器打开」' : '这个浏览器不支持摄像头，请换 Chrome 或 Safari', 6000); return; }
   if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
@@ -222,33 +224,50 @@ async function startCamera() {
     { video: { facingMode: facing }, audio: false },
     { video: true, audio: false },
   ];
-  let err = null;
-  for (const c of tries) { try { stream = await navigator.mediaDevices.getUserMedia(c); break; } catch (e) { err = e; if (e.name === 'NotAllowedError' || e.name === 'SecurityError') break; } }
-  if (!stream) {
+  let err = null, nextStream = null;
+  for (const c of tries) { try { nextStream = await navigator.mediaDevices.getUserMedia(c); break; } catch (e) { err = e; if (e.name === 'NotAllowedError' || e.name === 'SecurityError') break; } }
+  if (id !== sessionId) { if (nextStream) nextStream.getTracks().forEach((t) => t.stop()); return; }
+  if (!nextStream) {
     const msg = { NotAllowedError: '摄像头权限被拒绝：请在浏览器设置里允许摄像头，再刷新页面', NotFoundError: '没有找到摄像头：可以用「用视频测试」或「无摄像头演示」', NotReadableError: '摄像头正被别的应用占用，关掉后再试', SecurityError: '当前页面不允许使用摄像头（需要 https）' }[err && err.name];
     toast(msg || `无法打开摄像头：${err ? err.name : '未知错误'}`, 6000); return;
   }
+  stream = nextStream;
   stream.getVideoTracks()[0].addEventListener('ended', () => { toast('摄像头已断开', 4000); backToStart(); });
   if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
   src.removeAttribute('src'); src.srcObject = stream; src.muted = true; src.setAttribute('playsinline', ''); src.loop = false;
-  try { await src.play(); } catch (e) { toast('无法播放摄像头画面，请再点一次', 4000); return; }
+  try { await src.play(); } catch (e) {
+    stream.getTracks().forEach((t) => t.stop()); stream = null; src.srcObject = null;
+    toast('无法播放摄像头画面，请再点一次', 4000); return;
+  }
+  if (id !== sessionId) { stream.getTracks().forEach((t) => t.stop()); stream = null; src.srcObject = null; return; }
   await begin('camera');
 }
 
 async function startVideo(file) {
+  const id = ++sessionId;
   if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
   if (objectUrl) URL.revokeObjectURL(objectUrl);
-  objectUrl = URL.createObjectURL(file);
-  src.srcObject = null; src.src = objectUrl; src.loop = false; src.muted = true;
+  const localUrl = URL.createObjectURL(file); objectUrl = localUrl;
+  src.srcObject = null; src.src = localUrl; src.loop = false; src.muted = true;
   try {
-    await new Promise((r, j) => { src.onloadeddata = r; src.onerror = () => j(new Error('这个视频格式浏览器解不了，换 MP4 试试')); setTimeout(() => j(new Error('视频加载超时')), 15000); });
-  } catch (e) { toast(e.message, 5000); return; }
+    await new Promise((r, j) => {
+      let timer = 0; const clear = () => { clearTimeout(timer); src.onloadeddata = null; src.onerror = null; };
+      src.onloadeddata = () => { clear(); r(); };
+      src.onerror = () => { clear(); j(new Error('这个视频格式浏览器解不了，换 MP4 试试')); };
+      timer = setTimeout(() => { clear(); j(new Error('视频加载超时')); }, 15000);
+    });
+  } catch (e) {
+    if (objectUrl === localUrl) { URL.revokeObjectURL(localUrl); objectUrl = null; src.removeAttribute('src'); }
+    if (id === sessionId) toast(e.message, 5000); return;
+  }
+  if (id !== sessionId) return;
   src.onended = () => { videoEnded = true; if (fx.busy) toast('视频已结束：定格最后一帧，等烟花放完', 4000); };
   await begin('video');
   const t0 = performance.now();   // let the models warm up so the first seconds are analysed too
-  while (!detector.ready && !detector.error && performance.now() - t0 < 25000) await new Promise((r) => setTimeout(r, 200));
+  while (id === sessionId && mode === 'video' && !detector.ready && !detector.error && performance.now() - t0 < 25000) await new Promise((r) => setTimeout(r, 200));
+  if (id !== sessionId || mode !== 'video') return;
   src.currentTime = 0; lastVideoTime = -1; startRecording();
-  try { await src.play(); } catch (e) { toast('视频无法播放', 4000); return; }
+  try { await src.play(); } catch (e) { discardRecording = true; stopRecording(); backToStart(); toast('视频无法播放', 4000); return; }
   toast('处理中：视频播完、烟花放完后自动生成成片', 3500);
 }
 
@@ -264,8 +283,11 @@ function startRecording() {
   const mime = pickMime();
   try { recorder = new MediaRecorder(s, mime ? { mimeType: mime, videoBitsPerSecond: W >= 1000 ? 10_000_000 : 6_000_000 } : undefined); }
   catch (e) { toast('录制启动失败，可用系统录屏', 4000); recorder = null; return; }
-  chunks = []; recorder.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
-  recorder.onstop = () => showResult(new Blob(chunks, { type: recorder.mimeType || mime || 'video/webm' }));
+  chunks = []; discardRecording = false; recorder.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    if (discardRecording) { discardRecording = false; chunks = []; recorder = null; return; }
+    showResult(new Blob(chunks, { type: recorder.mimeType || mime || 'video/webm' }));
+  };
   recorder.start(500); recStart = performance.now(); setRecUI(true);
 }
 function requestStop() {
@@ -290,9 +312,13 @@ function showResult(blob) {
 }
 
 function backToStart() {
-  running = false; if (recorder && recorder.state === 'recording') recorder.stop();
+  sessionId++; running = false; waitingFinish = false; finishing = false;
+  if (recorder && recorder.state === 'recording') { discardRecording = true; recorder.stop(); }
+  setRecUI(false);
   if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
   src.pause(); src.removeAttribute('src'); src.srcObject = null;
+  if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+  if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
   show('bar', false); show('done', false); show('progress', false); show('start', true); toast('');
   mode = null; startIdle();
 }
@@ -300,7 +326,7 @@ function setSoundUI() { $('btnSound').textContent = sfx.on ? '声音 开' : '声
 
 // ---- wire up ----
 $('btnCamera').onclick = startCamera;
-$('btnDemo').onclick = () => begin('demo');
+$('btnDemo').onclick = () => { sessionId++; begin('demo'); };
 $('fileInput').onchange = (e) => { const f = e.target.files[0]; if (f) startVideo(f); e.target.value = ''; };
 $('btnBack').onclick = backToStart;
 $('btnAgain').onclick = () => { if (mode === 'video') backToStart(); else { show('done', false); show('bar', true); } };
@@ -327,4 +353,4 @@ function idle(now) {
 }
 function startIdle() { lastT = 0; fx.setFace(null); fx.setSilhouette(null); silOut = null; requestAnimationFrame(idle); }
 startIdle();
-if (qs.get('mode') === 'demo') begin('demo');
+if (qs.get('mode') === 'demo') { sessionId++; begin('demo'); }
