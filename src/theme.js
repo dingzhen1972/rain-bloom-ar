@@ -9,10 +9,10 @@
 
 export const THEME = {
   rain: {
-    color: [220, 232, 250],
+    color: [232, 241, 255],
     alphaNear: [0.08, 0.14],   // drops right in front of the lens (out of focus)
-    alphaOnPerson: 0.62,        // drops that land on the head / shoulders
-    alphaFar: [0.72, 0.3],      // from 0.5 m to the far distance (fog)
+    alphaOnPerson: 0.7,         // drops that land on the head / shoulders
+    alphaFar: [0.86, 0.36],     // from 0.5 m to the far distance (fog)
     dropWidth: 0.0019,          // physical drop diameter in metres (drives on-screen thickness)
     darkHalo: 0.16,             // soft dark edge that keeps rain readable on bright walls
     glint: [255, 235, 200],     // colour a drop flashes when a "ha" reaches it
@@ -22,7 +22,8 @@ export const THEME = {
     colors: [[255, 190, 90], [255, 190, 90], [255, 140, 60], [255, 244, 225], [255, 170, 120]],
     life: [1.8, 3.0], size: 3.2, halo: 3.6, haloAlpha: 0.26,
   },
-  flare: { core: [255, 245, 220], mid: [255, 190, 110] },
+  // each raindrop that ignites opens into a tiny golden floret (pre-rendered rays, no extra particles)
+  flare: { core: [255, 245, 220], mid: [255, 190, 110], life: 0.42, size: 4.2, rays: 6 },
   mouthGlow: { color: [255, 190, 120], pulseAlpha: 0.22, laughAlpha: 0.55 },
   fireworks: {
     colors: {
@@ -30,27 +31,34 @@ export const THEME = {
       red: [255, 78, 64], rose: [255, 110, 160], violet: [180, 130, 255], cyan: [110, 215, 255], green: [140, 255, 170],
     },
     radius: 0.36,            // burst radius as a fraction of frame width (size 1)
-    trailWidth: 1.8, trailGlowWidth: 7, headSize: 2.3,
+    trailWidth: 2.0, trailGlowWidth: 8, headSize: 2.5,
+    beads: true,             // trails drawn as glittering dotted lines (the "golden rain" look)
+    beadSize: 3.2,           // bead size in design px (older beads are drawn smaller)
+    headGlow: 4.5,           // soft glow around fresh star heads (high/mid tiers only)
+    fade: [255, 104, 52],    // colour a star cools to before it dies (gold → amber → ember red)
+    pistil: [255, 250, 238], // white-hot inner core of the grand shell
+    bloomGlow: [255, 196, 110], bloomGlowAlpha: 0.32,   // warm light that lingers where the grand shell opened
     smoke: [150, 150, 175], smokeAlpha: 0.1,
-    flashAlpha: 0.2,         // how much each burst lights the whole scene (and the person)
+    flashAlpha: 0.22,        // how much each burst lights the whole scene (and the person)
     // [seconds after the laugh, preferred x, preferred y, colour, size, kind]
-    // kinds: brocade, chrys, peony, willow, ring, cascade (cascade bursts in front of the person and its sparks land on them)
+    // x can be 'main': beside the head, on its roomier side, partly behind the person.
+    // kinds: grand (big beaded gold peony with a white core), brocade, chrys, peony, willow, ring,
+    //        cascade (bursts in front of the person; its sparks land on the head and shoulders)
+    // One big gold bloom first, then the rest open one after another around it.
     plan: [
-      [1.25, 0.28, 0.20, 'gold', 1.0, 'brocade'],
-      [1.80, 0.76, 0.24, 'red', 0.9, 'peony'],
-      [2.30, 0.54, 0.14, 'gold', 1.1, 'willow'],
-      [2.85, 0.18, 0.30, 'silver', 0.85, 'chrys'],
-      [3.20, 0.82, 0.30, 'rose', 0.85, 'peony'],
-      [3.65, 0.40, 0.17, 'white', 1.0, 'chrys'],
-      [3.80, 0.68, 0.18, 'violet', 0.85, 'ring'],
-      [4.30, 0.50, 0.12, 'gold', 1.3, 'willow'],
-      [4.55, 'head', 'aboveHead', 'gold', 1.0, 'cascade'],
-      [4.60, 0.22, 0.22, 'gold', 0.8, 'brocade'],
-      [4.70, 0.80, 0.22, 'gold', 0.8, 'brocade'],
+      [1.15, 'main', 0.22, 'gold', 1.6, 'grand'],
+      [1.85, 0.16, 0.30, 'white', 0.62, 'chrys'],
+      [2.20, 0.84, 0.26, 'silver', 0.66, 'chrys'],
+      [2.85, 0.50, 0.10, 'gold', 1.45, 'willow'],
+      [3.45, 0.20, 0.20, 'gold', 0.7, 'peony'],
+      [3.75, 0.80, 0.18, 'amber', 0.7, 'peony'],
+      [4.35, 'head', 'aboveHead', 'gold', 1.0, 'cascade'],
+      [4.60, 0.30, 0.16, 'white', 0.55, 'chrys'],
+      [4.75, 0.72, 0.14, 'white', 0.55, 'chrys'],
     ],
   },
   grade: {                    // multiply tint at full strength, sky darkening, vignette
-    rainLevel: 0.35, bloomLevel: 0.85,
+    rainLevel: 0.38, bloomLevel: 0.92,
     tint: [165, 150, 112], skyTint: [205, 198, 165], vignette: [3, 5, 14], vignetteAlpha: [0.32, 0.33],
   },
   hud: {

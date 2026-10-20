@@ -148,6 +148,12 @@ export class ChainRainEffect {
         const y = Math.max(0.08 * this.H, head.y - 0.2 * this.H);
         return { t: dt, x: head.x, y, col: F.colors[col], size, kind, front: true };
       }
+      if (px === 'main') {   // the big one: beside the head on its roomier side, opening partly behind the person
+        const side = head.x < this.W / 2 ? 1 : -1;
+        const x = clamp(head.x + side * 0.12 * this.W, 0.3 * this.W, 0.7 * this.W);
+        const y = clamp(Math.min(py * this.H, head.y - 0.02 * this.H), 0.14 * this.H, 0.32 * this.H);
+        return { t: dt, x, y, col: F.colors[col], size, kind, front: false };
+      }
       let x = px * this.W, top = this._top(x), y = py * this.H; const margin = 0.15 * this.H;
       if (top - margin < y) y = top - margin;
       if (y < 0.07 * this.H) { const alt = (1 - px) * this.W, t2 = this._top(alt); if (t2 - margin > y) { x = alt; y = Math.min(py * this.H, t2 - margin); } }
@@ -160,8 +166,8 @@ export class ChainRainEffect {
   }
 
   _igniteDrop(d) {
-    const E = this.theme.ember, S = this.S, zr = clamp(this.zp / d.z, 0.05, 3);
-    this.flares.push({ x: d.x, y: d.y, z: d.z, age: 0, life: 0.16, r: clamp(6 * zr, 1.5, 22) * S });
+    const E = this.theme.ember, Fl = this.theme.flare, S = this.S, zr = clamp(this.zp / d.z, 0.05, 3);
+    this.flares.push({ x: d.x, y: d.y, z: d.z, age: 0, life: Fl.life * this._r(0.8, 1.2), r: clamp(Fl.size * zr, 1.5, 16) * S, v: (this.rand() * 3) | 0 });
     if (this.rand() > 0.35 + 0.65 * this.quality) return;   // fewer embers on slow devices
     this.embers.push({ x: d.x, y: d.y, z: d.z, vx: this._r(-25, 25) * S * zr, vy: -this._r(20, 90) * S * zr, age: 0, life: this._r(E.life[0], E.life[1]),
       col: E.colors[Math.floor(this.rand() * E.colors.length)], r: clamp(E.size * zr, 1.7, 26) * S, ph: this._r(0, 6.28), lift: this._r(80, 260) * S * zr });
@@ -189,19 +195,30 @@ export class ChainRainEffect {
       this.onEvent('burst', { x: x / this.W, y: y / this.H, size, kind });
       return;
     }
-    const base = { brocade: 170, chrys: 190, peony: 160, willow: 140, ring: 100 }[kind] || 160;
+    const base = { grand: 330, brocade: 170, chrys: 150, peony: 120, willow: 200, ring: 100 }[kind] || 140;
     const n = Math.round(base * (0.45 + 0.55 * this.quality));
-    const heavy = kind === 'willow' || kind === 'brocade', drag = heavy ? 1.35 : 1.9, tilt = this._r(0.35, 0.8), rot = this._r(0, 3);
-    const tl = Math.round((heavy ? 20 : kind === 'peony' ? 4 : 11) * (0.5 + 0.5 * this.quality));
+    const grand = kind === 'grand', heavy = kind === 'willow' || kind === 'brocade';
+    const drag = heavy ? 1.35 : grand ? 1.55 : 1.9, tilt = this._r(0.35, 0.8), rot = this._r(0, 3);
+    const tl = Math.round((kind === 'willow' ? 26 : grand ? 18 : heavy ? 20 : kind === 'peony' ? 7 : 11) * (0.5 + 0.5 * this.quality));
+    const fade = F.fade || col;
     for (let k = 0; k < n; k++) {
       let dx, dy;
       if (kind === 'ring') { const a = (k / n) * 6.283, px = Math.cos(a), py = Math.sin(a) * tilt; dx = px * Math.cos(rot) - py * Math.sin(rot); dy = px * Math.sin(rot) + py * Math.cos(rot); }
       else { const u = this._r(-1, 1), a = this._r(0, 6.283), rr = Math.sqrt(1 - u * u); dx = rr * Math.cos(a); dy = rr * Math.sin(a); }
-      const s = R * drag * this._r(0.84, 1.04);
-      this.stars.push({ x, y, vx: dx * s, vy: dy * s, drag, g: (heavy ? 160 : 100) * S, age: 0,
-        life: heavy ? this._r(2.8, 3.8) : kind === 'peony' ? this._r(1.5, 2.1) : this._r(2.0, 2.7),
-        col: kind === 'chrys' && this.rand() < 0.2 ? F.colors.white : col, tr: [], tl, w: (kind === 'peony' ? 3.2 : F.headSize) * S,
-        glit: heavy || kind === 'chrys', strobe: kind === 'chrys' && this.rand() < 0.4, k: this._r(0, 6.28) });
+      const s = R * drag * this._r(0.9, 1.04);
+      this.stars.push({ x, y, vx: dx * s, vy: dy * s, drag, g: (heavy ? 160 : grand ? 120 : 100) * S, age: 0,
+        life: kind === 'willow' ? this._r(3.2, 4.0) : heavy ? this._r(2.8, 3.8) : grand ? this._r(2.6, 3.3) : kind === 'peony' ? this._r(1.5, 2.1) : this._r(1.8, 2.5),
+        col: kind === 'chrys' && this.rand() < 0.3 ? F.colors.white : col, fade: heavy || grand ? fade : null, tr: [], tl, w: (kind === 'peony' ? 3.0 : grand ? 2.8 : F.headSize) * S,
+        glit: heavy || grand || kind === 'chrys', strobe: kind === 'chrys' && this.rand() < 0.4, k: this._r(0, 6.28) });
+    }
+    if (grand && F.bloomGlow) this.glows.push({ x, y, age: 0, life: 1.8, R: 0.42 * this.W, a: F.bloomGlowAlpha, col: F.bloomGlow });
+    if (grand) {   // white-hot pistil: a smaller, faster-fading inner sphere
+      const m = Math.round(n * 0.3), pc = F.pistil || F.colors.white;
+      for (let k = 0; k < m; k++) {
+        const u = this._r(-1, 1), a = this._r(0, 6.283), rr = Math.sqrt(1 - u * u), s = R * 1.9 * 0.42 * this._r(0.85, 1.05);
+        this.stars.push({ x, y, vx: rr * Math.cos(a) * s, vy: rr * Math.sin(a) * s, drag: 1.9, g: 80 * S, age: 0, life: this._r(1.1, 1.5),
+          col: pc, fade: null, tr: [], tl: Math.max(4, Math.round(9 * this.quality)), w: 3.4 * S, glit: false, strobe: false, k: 0 });
+      }
     }
     const puffs = this.quality > 0.6 ? 6 : 0;
     for (let k = 0; k < puffs; k++) this.smoke.push({ x: x + this._r(-0.5, 0.5) * R, y: y + this._r(-0.4, 0.5) * R, r: this._r(0.25, 0.55) * R, age: 0, life: this._r(5, 8), vx: this._r(-12, 22) * S, vy: this._r(-10, 6) * S });
@@ -300,6 +317,17 @@ export class ChainRainEffect {
     let c = this._sprites.get(key); if (c) return c;
     c = document.createElement('canvas'); const x = c.getContext('2d');
     if (kind === 'streak') { c.width = 8; c.height = 128; const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, rgba(col, 0)); g.addColorStop(1, rgba(col, 1)); x.fillStyle = g; x.fillRect(2, 0, 4, 128); }
+    else if (kind.startsWith('floret')) {   // tiny golden flower a raindrop opens into: rays + beads + hot centre
+      const F = this.theme.flare, n = F.rays || 6, rot = Number(kind.slice(6)) * 0.37; c.width = c.height = 64;
+      const g = x.createRadialGradient(32, 32, 0, 32, 32, 30); g.addColorStop(0, rgba(F.core, 0.9)); g.addColorStop(0.18, rgba(col, 0.45)); g.addColorStop(1, rgba(col, 0));
+      x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+      x.strokeStyle = rgba(col, 0.95); x.lineWidth = 2.2; x.lineCap = 'round'; x.fillStyle = rgba(F.core, 1);
+      for (let k = 0; k < n; k++) {
+        const a = rot + (k / n) * 6.283, ca = Math.cos(a), sa = Math.sin(a);
+        x.beginPath(); x.moveTo(32 + ca * 6, 32 + sa * 6); x.lineTo(32 + ca * 22, 32 + sa * 22); x.stroke();
+        x.beginPath(); x.arc(32 + ca * 26, 32 + sa * 26, 2.6, 0, 6.283); x.fill();
+      }
+    }
     else { c.width = c.height = 64; const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
       if (kind === 'glow') { g.addColorStop(0, rgba(col, 1)); g.addColorStop(0.25, rgba(col, 0.5)); g.addColorStop(1, rgba(col, 0)); }
       else if (kind === 'disc') { g.addColorStop(0, rgba(col, 0.5)); g.addColorStop(0.75, rgba(col, 0.38)); g.addColorStop(1, rgba(col, 0)); }
@@ -370,13 +398,13 @@ export class ChainRainEffect {
     }
     for (const gl of this.glows) {
       const k = gl.age / gl.life, al = gl.a * (k < 0.15 ? k / 0.15 : Math.pow(1 - (k - 0.15) / 0.85, 1.6));
-      ctx.globalAlpha = al; ctx.drawImage(this._sprite('glow', T.mouthGlow.color), gl.x - gl.R, gl.y - gl.R, gl.R * 2, gl.R * 2);
+      ctx.globalAlpha = al; ctx.drawImage(this._sprite('glow', gl.col || T.mouthGlow.color), gl.x - gl.R, gl.y - gl.R, gl.R * 2, gl.R * 2);
     }
     // burst light on the scene and the person: only the two freshest flashes, smaller on slow devices
     // burst light: the scene-wide part is folded into the grade (see flashLevel); here only a local glow
     if (this.quality > 0.6) for (const f of this.flashes) {
       const k = f.age / 1.4, al = (f.age < 0.06 ? f.age / 0.06 : Math.pow(1 - k, 2.4)) * T.fireworks.flashAlpha * Math.min(1.2, f.s);
-      const R = W * 0.38 * f.s; ctx.globalAlpha = al; ctx.drawImage(this._sprite('soft', f.col), f.x - R, f.y - R, R * 2, R * 2);
+      const R = W * 0.38 * Math.min(1.15, f.s); ctx.globalAlpha = al; ctx.drawImage(this._sprite('soft', f.col), f.x - R, f.y - R, R * 2, R * 2);
     }
     ctx.restore();
   }
@@ -431,11 +459,14 @@ export class ChainRainEffect {
 
   _drawStars(L) {
     const F = this.theme.fireworks, S = this.S, white = F.colors.white;
+    const beads = F.beads && this.quality >= 0.45, bs = (F.beadSize || 2.4) * S;
     const buckets = new Map();
     for (const p of this.stars) {
       const f = 1 - p.age / p.life;
       let al = Math.pow(f, 1.1); if (p.strobe && p.age > 0.9) al *= Math.sin(this.time * 40 + p.k) > 0.2 ? 1 : 0.1;
-      const c = p.age < 0.25 ? mix(white, p.col, p.age / 0.25) : p.col;
+      // white-hot at birth → its own colour → cools to ember red at the end (quantised so draws stay batched)
+      let c = p.age < 0.25 ? mix(white, p.col, Math.round((p.age / 0.25) * 3) / 3) : p.col;
+      if (p.fade && f < 0.45) c = mix(p.col, p.fade, Math.round(((0.45 - f) / 0.45) * 3) / 3);
       const key = `${c[0] | 0},${c[1] | 0},${c[2] | 0}|${Math.min(4, Math.floor(al * 5))}`;
       let arr = buckets.get(key); if (!arr) buckets.set(key, (arr = [])); arr.push(p);
     }
@@ -447,11 +478,32 @@ export class ChainRainEffect {
         const step = this.quality > 0.7 ? 2 : 4;
         for (let j = 0; j < t.length; j += step) { if (this._hidden(t[j], t[j + 1])) { pen = false; continue; } if (pen) L.lineTo(t[j], t[j + 1]); else { L.moveTo(t[j], t[j + 1]); pen = true; } }
       }
-      if (this.quality > 0.85) { L.strokeStyle = rgba(col, al * 0.16); L.lineWidth = F.trailGlowWidth * S; L.stroke(); }
-      L.strokeStyle = rgba(col, al * 0.55); L.lineWidth = F.trailWidth * S; L.stroke();
+      if (this.quality > 0.85) { L.strokeStyle = rgba(col, al * 0.14); L.lineWidth = F.trailGlowWidth * S; L.stroke(); }
+      L.strokeStyle = rgba(col, al * (beads ? 0.3 : 0.55)); L.lineWidth = F.trailWidth * S; L.stroke();
+      if (beads) {   // dotted trail: one bead per sampled position; fast stars leave sparse beads, slow ones dense
+        const step = this.quality > 0.7 ? 2 : 4;
+        for (let half = 0; half < (this.quality >= 0.6 ? 2 : 1); half++) {   // newer half bright and full size, older half dimmer and smaller (high tiers only)
+          const r = bs * (half ? 0.32 : 0.5);
+          L.fillStyle = rgba(col, Math.min(1, al * (half ? 0.45 : 0.95))); L.beginPath();
+          for (const p of arr) {
+            const t = p.tr, n = t.length, mid = (n >> 2) << 1; if (n < 6) continue;
+            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { if (!this._hidden(t[j], t[j + 1])) L.rect(t[j] - r, t[j + 1] - r, r * 2, r * 2); }
+          }
+          L.fill();
+        }
+      }
       L.fillStyle = rgba(col, Math.min(1, al * 1.3)); L.beginPath();
       for (const p of arr) { if (this._hidden(p.x, p.y)) continue; const rr = p.w * (p.age < 0.12 ? 1.8 : 1); L.rect(p.x - rr * 0.9, p.y - rr * 0.9, rr * 1.8, rr * 1.8); }
       L.fill();
+    }
+    if (F.headGlow && this.quality > 0.6) {   // soft bloom around young star heads only
+      const gs = this._sprite('glow', F.colors.gold), ws = this._sprite('glow', white);
+      for (const p of this.stars) {
+        if (p.age > 0.7 || this._hidden(p.x, p.y)) continue;
+        const s = p.w * F.headGlow * 2; L.globalAlpha = 0.45 * smooth(p.age / 0.18) * (1 - p.age / 0.7);   // fades in so a fresh burst never saturates into a white disc
+        L.drawImage(p.col === F.colors.gold ? gs : ws, p.x - s / 2, p.y - s / 2, s, s);
+      }
+      L.globalAlpha = 1;
     }
     if (this.glitter) {
       L.fillStyle = 'rgba(255,250,235,0.9)';
@@ -473,8 +525,9 @@ export class ChainRainEffect {
     const F = this.theme.flare;
     for (const fl of this.flares) {
       if ((fl.z < this.zp) !== front || (!front && this._hidden(fl.x, fl.y))) continue;
-      const k = fl.age / fl.life, r = fl.r * (1 + k) * 2.5;
-      c.globalAlpha = 1 - k; c.drawImage(this._sprite('glow', F.core), fl.x - r, fl.y - r, r * 2, r * 2);
+      // opens fast, then fades while the rays drift outward a little
+      const k = fl.age / fl.life, r = fl.r * (0.6 + 1.6 * Math.sqrt(k)) * 2.5;
+      c.globalAlpha = Math.min(1, k * 8) * Math.pow(1 - k, 1.4); c.drawImage(this._sprite('floret' + (fl.v || 0), F.mid), fl.x - r, fl.y - r, r * 2, r * 2);
     }
     c.globalAlpha = 1;
   }
