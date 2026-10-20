@@ -37,6 +37,9 @@ export const THEME = {
     headGlow: 4.5,           // soft glow around fresh star heads (high/mid tiers only)
     fade: [255, 104, 52],    // colour a star cools to before it dies (gold → amber → ember red)
     pistil: [255, 250, 238], // white-hot inner core of the grand shell
+    // extra stars on strong devices only: full at quality 1 (high tier), none at ≤ 0.75 (mid / low tiers).
+    // The runtime governor lowers quality when frames run long, so this backs off by itself on a hot phone.
+    highTierDensity: { grand: 1.9, willow: 1.5, chrys: 1.3, peony: 1.3 },
     bloomGlow: [255, 196, 110], bloomGlowAlpha: 0.32,   // warm light that lingers where the grand shell opened
     smoke: [150, 150, 175], smokeAlpha: 0.1,
     flashAlpha: 0.22,        // how much each burst lights the whole scene (and the person)

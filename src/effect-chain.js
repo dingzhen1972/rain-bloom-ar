@@ -196,7 +196,8 @@ export class ChainRainEffect {
       return;
     }
     const base = { grand: 330, brocade: 170, chrys: 150, peony: 120, willow: 200, ring: 100 }[kind] || 140;
-    const n = Math.round(base * (0.45 + 0.55 * this.quality));
+    const dense = 1 + (((F.highTierDensity || {})[kind] || 1) - 1) * inv(0.75, 1, this.quality);
+    const n = Math.round(base * (0.45 + 0.55 * this.quality) * dense);
     const grand = kind === 'grand', heavy = kind === 'willow' || kind === 'brocade';
     const drag = heavy ? 1.35 : grand ? 1.55 : 1.9, tilt = this._r(0.35, 0.8), rot = this._r(0, 3);
     const tl = Math.round((kind === 'willow' ? 26 : grand ? 18 : heavy ? 20 : kind === 'peony' ? 7 : 11) * (0.5 + 0.5 * this.quality));
