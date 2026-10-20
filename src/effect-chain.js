@@ -71,12 +71,29 @@ export class ChainRainEffect {
     if (!tops || !tops.length) { this.sil = null; this.silV = null; this.silPath = null; return; }
     const dt = Math.max(1 / 120, this.time - this._silT); this._silT = this.time;
     const prev = this.sil, n = tops.length;
+    tops = this._constrainToFace(tops);
     if (!this.silV || this.silV.length !== n) this.silV = new Float32Array(n);
     for (let i = 0; i < n; i++) {   // how fast each part of the outline moves (the head pushing sparks around)
       const v = prev && prev.length === n && tops[i] < 0.995 && prev[i] < 0.995 ? ((tops[i] - prev[i]) * this.H) / dt : 0;
       this.silV[i] += (clamp(v, -3000, 3000) - this.silV[i]) * 0.5;
     }
     this.sil = Float32Array.from(tops);
+  }
+  /** Person segmentation often swallows what is behind the person (a high chair back, a dark beam, a coat).
+   *  The face box is far more reliable, so it bounds the outline: above the head at most a hair's margin,
+   *  beside the head no higher than the chin. Columns with nobody (≥ 0.995) are left alone. */
+  _constrainToFace(tops) {
+    const f = this.face; if (!f) return tops;
+    const n = tops.length, out = new Float32Array(n);
+    const headTop = (f.cy - f.ry * 2.5) / this.H, chin = (f.cy + f.ry * 0.5) / this.H, wide = f.rx * 1.7;   // room for big hair, a bun or a cap
+    for (let i = 0; i < n; i++) {
+      const t = tops[i]; if (t >= 0.995) { out[i] = t; continue; }
+      const dx = Math.abs(((i + 0.5) / n) * this.W - f.cx);
+      // a rounded head cap inside the face width, the chin line outside it, blended over half a face width
+      const cap = dx < wide ? headTop + (1 - Math.sqrt(Math.max(0, 1 - (dx / wide) ** 2))) * (chin - headTop) : chin;
+      out[i] = Math.min(1, Math.max(t, cap));
+    }
+    return out;
   }
   get busy() { return this.state === 'bloom'; }
 
@@ -150,8 +167,9 @@ export class ChainRainEffect {
       }
       if (px === 'main') {   // the big one: beside the head on its roomier side, opening partly behind the person
         const side = head.x < this.W / 2 ? 1 : -1;
-        const x = clamp(head.x + side * 0.12 * this.W, 0.3 * this.W, 0.7 * this.W);
-        const y = clamp(Math.min(py * this.H, head.y - 0.02 * this.H), 0.14 * this.H, 0.32 * this.H);
+        // the white-hot core sits in clear sky above the hair; only the lower rays pass behind the head
+        const x = clamp(head.x + side * 0.14 * this.W, 0.3 * this.W, 0.7 * this.W);
+        const y = clamp(Math.min(py * this.H, head.y - 0.07 * this.H), 0.12 * this.H, 0.32 * this.H);
         return { t: dt, x, y, col: F.colors[col], size, kind, front: false };
       }
       let x = px * this.W, top = this._top(x), y = py * this.H; const margin = 0.15 * this.H;
