@@ -20,6 +20,7 @@ const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const inv = (a, b, x) => clamp((x - a) / (b - a));
 const smooth = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
+const frac = (v) => v - Math.floor(v);
 const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 function mulberry32(a) {
@@ -129,8 +130,8 @@ export class ChainRainEffect {
     const R = this.theme.rain, u = this.rand(), zp = this.zp, span = this._span();
     let z, x, band = false;
     if (u < 0.04) z = this._r(0.22, Math.max(0.26, zp - 0.15));
-    else if (u < 0.2 && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
-    else if (u < 0.62) z = this._r(zp + 0.3, 4.5);
+    else if (u < 0.04 + R.onPerson && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
+    else if (u < 0.66) z = this._r(zp + 0.3, 4.5);
     else z = this._r(4.5, Z_FAR);
     if (x === undefined) x = this._r(-0.05, 1.05) * this.W;
     const v = (this.f * FALL / z) * this._r(0.9, 1.1);
@@ -204,10 +205,10 @@ export class ChainRainEffect {
   _burst(r) {
     const F = this.theme.fireworks, S = this.S, { x, y, col, size, kind } = r, R = F.radius * this.W * size;
     if (kind === 'cascade') {   // golden rain that falls onto the person and bounces off
-      const n = Math.round(150 * (0.4 + 0.6 * this.quality));
+      const n = Math.round(150 * size * (0.4 + 0.6 * this.quality));
       for (let k = 0; k < n; k++) {
         const a = this._r(0, 6.283), s = this._r(0.2, 1) * 0.75 * R;
-        this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.5 - 90 * S, age: 0, life: this._r(2.6, 3.6), col: mix(col, F.colors.white, this._r(0, 0.4)), r: this._r(1.6, 2.8) * S, hits: 0 });
+        this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.5 - 90 * S, age: 0, life: this._r(2.6, 3.6), col: mix(col, F.colors.white, this._r(0, 0.4)), r: this._r(1.6, 2.8) * S, hits: 0, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7) });
       }
       this.flashes.push({ x, y, col, age: 0, s: size * 0.8 });
       this.onEvent('burst', { x: x / this.W, y: y / this.H, size, kind });
@@ -219,8 +220,8 @@ export class ChainRainEffect {
     const grand = kind === 'grand', heavy = kind === 'willow' || kind === 'brocade';
     const drag = heavy ? 1.35 : grand ? 1.55 : 1.9, tilt = this._r(0.35, 0.8), rot = this._r(0, 3);
     const tl = Math.round((kind === 'willow' ? 26 : grand ? 18 : heavy ? 20 : kind === 'peony' ? 7 : 11) * (0.5 + 0.5 * this.quality));
-    const fade = F.fade || col;
-    for (let k = 0; k < n; k++) {
+    const fade = F.fade || col, share = (F.frontShare || {})[kind] || 0, nBack = Math.round(n * (1 - share));
+    for (let k = 0; k < nBack; k++) {   // the rest of the shell (share) is spawned in front of the person, see _frontSparks
       let dx, dy;
       if (kind === 'ring') { const a = (k / n) * 6.283, px = Math.cos(a), py = Math.sin(a) * tilt; dx = px * Math.cos(rot) - py * Math.sin(rot); dy = px * Math.sin(rot) + py * Math.cos(rot); }
       else { const u = this._r(-1, 1), a = this._r(0, 6.283), rr = Math.sqrt(1 - u * u); dx = rr * Math.cos(a); dy = rr * Math.sin(a); }
@@ -230,13 +231,14 @@ export class ChainRainEffect {
         col: kind === 'chrys' && this.rand() < 0.3 ? F.colors.white : col, fade: heavy || grand ? fade : null, tr: [], tl, w: (kind === 'peony' ? 3.0 : grand ? 2.8 : F.headSize) * S,
         glit: heavy || grand || kind === 'chrys', strobe: kind === 'chrys' && this.rand() < 0.4, k: this._r(0, 6.28) });
     }
+    if (share) this._frontSparks(x, y, R, Math.round(n * share), col);
     if (grand && F.bloomGlow) this.glows.push({ x, y, age: 0, life: 1.8, R: 0.42 * this.W, a: F.bloomGlowAlpha, col: F.bloomGlow });
     if (grand) {   // white-hot pistil: a smaller, faster-fading inner sphere
       const m = Math.round(n * 0.3), pc = F.pistil || F.colors.white;
       for (let k = 0; k < m; k++) {
         const u = this._r(-1, 1), a = this._r(0, 6.283), rr = Math.sqrt(1 - u * u), s = R * 1.9 * 0.42 * this._r(0.85, 1.05);
         this.stars.push({ x, y, vx: rr * Math.cos(a) * s, vy: rr * Math.sin(a) * s, drag: 1.9, g: 80 * S, age: 0, life: this._r(1.1, 1.5),
-          col: pc, fade: null, tr: [], tl: Math.max(4, Math.round(9 * this.quality)), w: 3.4 * S, glit: false, strobe: false, k: 0 });
+          col: pc, fade: null, tr: [], tl: Math.max(4, Math.round(9 * this.quality)), w: 3.4 * S, glit: false, strobe: false, k: this._r(0, 6.28) });
       }
     }
     const puffs = this.quality > 0.6 ? 6 : 0;
@@ -302,6 +304,17 @@ export class ChainRainEffect {
     for (let i = this.glows.length - 1; i >= 0; i--) { this.glows[i].age += dt; if (this.glows[i].age > this.glows[i].life) drop(this.glows, i); }
   }
 
+  /** Part of a big shell bursts on the near side of the person: those sparks fall with full physics and
+   *  bounce off the head and shoulders (same collider as the cascade). */
+  _frontSparks(x, y, R, m, col) {
+    const S = this.S, F = this.theme.fireworks;
+    for (let k = 0; k < m; k++) {
+      const a = this._r(0, 6.283), s = this._r(0.35, 1) * 0.95 * R;
+      this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6 - 40 * S, age: 0, life: this._r(2.4, 3.4),
+        col: mix(col, F.colors.white, this._r(0, 0.35)), r: this._r(1.8, 3.0) * S, hits: 0, wht: this.rand() < 0.25, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7) });
+    }
+  }
+
   // golden cascade sparks: gravity, air drag, and collisions with the person's outline (which can move)
   _debris(dt) {
     const S = this.S, g = 900 * S, e = 0.45, mu = 0.12;
@@ -311,7 +324,9 @@ export class ChainRainEffect {
       p.px = p.x; p.py = p.y;
       const k = Math.exp(-0.9 * dt); p.vx *= k; p.vy = p.vy * k + g * dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
-      const top = this._top(p.x);
+      // a spark lands on the head's upper surface, which projects a little inside the silhouette edge:
+      // each spark gets its own contact depth, so landed sparks don't trace the outline as one bright line
+      const top = this._top(p.x) + (p.dep ?? 0);
       if (top !== Infinity && p.y >= top - 0.5) {
         // surface normal from the outline slope; surface velocity from how the outline moved since last frame
         const h = 6 * S, slope = (this._top(p.x + h) - this._top(p.x - h)) / (2 * h);
@@ -321,7 +336,9 @@ export class ChainRainEffect {
         const rvx = p.vx - sv.x, rvy = p.vy - sv.y, vn = rvx * nx + rvy * ny;
         if (vn < 0) {
           const tx = rvx - vn * nx, ty = rvy - vn * ny;
-          p.vx = sv.x + tx * (1 - mu) - e * vn * nx + this._r(-1, 1) * 90 * S; p.vy = sv.y + ty * (1 - mu) - e * vn * ny;
+          const ei = p.e ?? e;   // hair is uneven: every spark bounces a little differently
+          p.vx = sv.x + tx * (1 - mu) - ei * vn * nx + this._r(-1, 1) * 140 * S; p.vy = sv.y + ty * (1 - mu) - ei * vn * ny;
+          if (!p.hits) p.life = Math.min(p.life, p.age + this._r(0.5, 1.1));   // a landed spark burns out soon after
           if (-vn > 180 * S && p.hits < 3 && this.splash.length < 400) this.splash.push({ x: p.x, y: top - 1, vx: 0, vy: 0, age: 0, life: 0.1, r: 2.6 * S, glint: true, warm: true });
           p.hits++;
         }
@@ -403,13 +420,7 @@ export class ChainRainEffect {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const r of this.rockets) if (r.front) this._drawRocket(ctx, r);
     this._drawEmbers(ctx, true); this._drawFlares(ctx, true);
-    const ds = this._sprite('glow', T.fireworks.colors.gold);
-    for (const p of this.debris) {
-      const f = 1 - p.age / p.life, a = Math.min(1, f * 1.4) * (0.7 + 0.3 * Math.sin(this.time * 25 + p.x));
-      ctx.strokeStyle = rgba(p.col, a * 0.6); ctx.lineWidth = p.r * 0.9; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(p.px - (p.x - p.px) * 2, p.py - (p.y - p.py) * 2); ctx.lineTo(p.x, p.y); ctx.stroke();
-      ctx.globalAlpha = a; const s = p.r * 5; ctx.drawImage(ds, p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1;
-    }
+    this._drawDebris(ctx);
     for (const p of this.splash) {
       const f = 1 - p.age / p.life;
       if (p.glint) { ctx.globalAlpha = (p.warm ? 0.9 : T.splash.glintAlpha) * f; const s = p.r * 6; ctx.drawImage(this._sprite('glow', p.warm ? T.fireworks.colors.gold : T.splash.color), p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1; }
@@ -429,6 +440,10 @@ export class ChainRainEffect {
   }
 
   _hidden(x, y) { return y > this._top(x) + 2 * this.S; }
+  /** Behind-the-person test with a soft edge: within a band above the outline a point disappears with a
+   *  probability that grows toward the outline (h = stable 0..1 hash per point), so far sparks dissolve
+   *  into the person instead of being cut along a hard line (which reads as a cut-out mask). */
+  _behind(x, y, h) { const t = this._top(x); return t !== Infinity && y > t + 2 * this.S - this.theme.fireworks.behindFade * this.H * h; }
 
   _drawRocket(ctx, r) {
     const S = this.S, tr = r.tr; if (tr.length < 4) return;
@@ -495,7 +510,7 @@ export class ChainRainEffect {
       for (const p of arr) {
         const t = p.tr; if (t.length < 4) continue; let pen = false;
         const step = this.quality > 0.7 ? 2 : 4;
-        for (let j = 0; j < t.length; j += step) { if (this._hidden(t[j], t[j + 1])) { pen = false; continue; } if (pen) L.lineTo(t[j], t[j + 1]); else { L.moveTo(t[j], t[j + 1]); pen = true; } }
+        for (let j = 0; j < t.length; j += step) { if (this._behind(t[j], t[j + 1], frac(p.k + j * 0.618))) { pen = false; continue; } if (pen) L.lineTo(t[j], t[j + 1]); else { L.moveTo(t[j], t[j + 1]); pen = true; } }
       }
       if (this.quality > 0.85) { L.strokeStyle = rgba(col, al * 0.14); L.lineWidth = F.trailGlowWidth * S; L.stroke(); }
       L.strokeStyle = rgba(col, al * (beads ? 0.3 : 0.55)); L.lineWidth = F.trailWidth * S; L.stroke();
@@ -506,19 +521,19 @@ export class ChainRainEffect {
           L.fillStyle = rgba(col, Math.min(1, al * (half ? 0.45 : 0.95))); L.beginPath();
           for (const p of arr) {
             const t = p.tr, n = t.length, mid = (n >> 2) << 1; if (n < 6) continue;
-            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { if (!this._hidden(t[j], t[j + 1])) L.rect(t[j] - r, t[j + 1] - r, r * 2, r * 2); }
+            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { if (!this._behind(t[j], t[j + 1], frac(p.k + j * 0.618))) L.rect(t[j] - r, t[j + 1] - r, r * 2, r * 2); }
           }
           L.fill();
         }
       }
       L.fillStyle = rgba(col, Math.min(1, al * 1.3)); L.beginPath();
-      for (const p of arr) { if (this._hidden(p.x, p.y)) continue; const rr = p.w * (p.age < 0.12 ? 1.8 : 1); L.rect(p.x - rr * 0.9, p.y - rr * 0.9, rr * 1.8, rr * 1.8); }
+      for (const p of arr) { if (this._behind(p.x, p.y, frac(p.k * 7.31))) continue; const rr = p.w * (p.age < 0.12 ? 1.8 : 1); L.rect(p.x - rr * 0.9, p.y - rr * 0.9, rr * 1.8, rr * 1.8); }
       L.fill();
     }
     if (F.headGlow && this.quality > 0.6) {   // soft bloom around young star heads only
       const gs = this._sprite('glow', F.colors.gold), ws = this._sprite('glow', white);
       for (const p of this.stars) {
-        if (p.age > 0.7 || this._hidden(p.x, p.y)) continue;
+        if (p.age > 0.7 || this._behind(p.x, p.y, frac(p.k * 7.31))) continue;
         const s = p.w * F.headGlow * 2; L.globalAlpha = 0.45 * smooth(p.age / 0.18) * (1 - p.age / 0.7);   // fades in so a fresh burst never saturates into a white disc
         L.drawImage(p.col === F.colors.gold ? gs : ws, p.x - s / 2, p.y - s / 2, s, s);
       }
@@ -526,14 +541,34 @@ export class ChainRainEffect {
     }
     if (this.glitter) {
       L.fillStyle = 'rgba(255,250,235,0.9)';
-      for (const p of this.stars) if (p.glit && p.tr.length > 6 && this.rand() < 0.3) { const j = 2 * Math.floor(this.rand() * (p.tr.length / 2)); if (!this._hidden(p.tr[j], p.tr[j + 1])) L.fillRect(p.tr[j] - S, p.tr[j + 1] - S, 2 * S, 2 * S); }
+      for (const p of this.stars) if (p.glit && p.tr.length > 6 && this.rand() < 0.3) { const j = 2 * Math.floor(this.rand() * (p.tr.length / 2)); if (!this._behind(p.tr[j], p.tr[j + 1], frac(p.k + j * 0.618))) L.fillRect(p.tr[j] - S, p.tr[j + 1] - S, 2 * S, 2 * S); }
     }
+  }
+
+  _drawDebris(c) {   // sparks in front of the person: streaks batched by brightness, then a glow per spark
+    if (!this.debris.length) return;
+    const F = this.theme.fireworks, S = this.S, L = 4, paths = [];
+    for (let i = 0; i < L; i++) paths.push([]);
+    for (const p of this.debris) {
+      const f = 1 - p.age / p.life; p.a = Math.min(1, f * 1.4) * (0.7 + 0.3 * Math.sin(this.time * 25 + p.x));
+      paths[Math.min(L - 1, Math.floor(p.a * L))].push(p);
+    }
+    c.lineCap = 'round'; c.lineWidth = 2.2 * S;
+    for (let i = 0; i < L; i++) {
+      const arr = paths[i]; if (!arr.length) continue;
+      c.strokeStyle = rgba(F.colors.gold, ((i + 0.5) / L) * 0.6); c.beginPath();
+      for (const p of arr) { c.moveTo(p.px - (p.x - p.px) * 2, p.py - (p.y - p.py) * 2); c.lineTo(p.x, p.y); }
+      c.stroke();
+    }
+    const gs = this._sprite('glow', F.colors.gold), ws = this._sprite('glow', F.colors.white);
+    for (const p of this.debris) { c.globalAlpha = p.a; const s = p.r * 5; c.drawImage(p.wht ? ws : gs, p.x - s / 2, p.y - s / 2, s, s); }
+    c.globalAlpha = 1;
   }
 
   _drawEmbers(c, front) {
     const E = this.theme.ember;
     for (const e of this.embers) {
-      if ((e.z < this.zp) !== front || (!front && this._hidden(e.x, e.y))) continue;
+      if ((e.z < this.zp) !== front || (!front && this._behind(e.x, e.y, frac(e.ph * 3.7)))) continue;
       const f = 1 - e.age / e.life, tw = 0.6 + 0.4 * Math.sin(this.time * 12 + e.ph * 3), al = Math.min(1, e.age / 0.12) * f * tw;
       if (e.r > 7 * this.S) { c.globalAlpha = al; c.drawImage(this._sprite('disc', e.col), e.x - e.r, e.y - e.r, e.r * 2, e.r * 2); continue; }
       const s = e.r * E.halo * 2; c.globalAlpha = al; c.drawImage(this._sprite('glow', e.col), e.x - s / 2, e.y - s / 2, s, s);

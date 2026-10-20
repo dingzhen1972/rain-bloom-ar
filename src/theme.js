@@ -12,12 +12,13 @@ export const THEME = {
     color: [232, 241, 255],
     alphaNear: [0.08, 0.14],   // drops right in front of the lens (out of focus)
     alphaOnPerson: 0.7,         // drops that land on the head / shoulders
+    onPerson: 0.26,             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
     alphaFar: [0.86, 0.36],     // from 0.5 m to the far distance (fog)
     dropWidth: 0.0019,          // physical drop diameter in metres (drives on-screen thickness)
     darkHalo: 0.16,             // soft dark edge that keeps rain readable on bright walls
     glint: [255, 235, 200],     // colour a drop flashes when a "ha" reaches it
   },
-  splash: { color: [228, 240, 255], alpha: 0.55, glintAlpha: 0.55 },
+  splash: { color: [232, 242, 255], alpha: 0.7, glintAlpha: 0.75 },
   ember: {
     colors: [[255, 190, 90], [255, 190, 90], [255, 140, 60], [255, 244, 225], [255, 170, 120]],
     life: [1.8, 3.0], size: 3.2, halo: 3.6, haloAlpha: 0.26,
@@ -39,6 +40,9 @@ export const THEME = {
     pistil: [255, 250, 238], // white-hot inner core of the grand shell
     // extra stars on strong devices only: full at quality 1 (high tier), none at ≤ 0.75 (mid / low tiers).
     // The runtime governor lowers quality when frames run long, so this backs off by itself on a hot phone.
+    // part of a big shell opens on the near side of the person: those sparks rain onto the head and shoulders and bounce
+    frontShare: { grand: 0.3, willow: 0.3 },
+    behindFade: 0.07,        // far sparks dissolve over this height (fraction of frame) above the person's outline
     highTierDensity: { grand: 1.9, willow: 1.5, chrys: 1.3, peony: 1.3 },
     bloomGlow: [255, 196, 110], bloomGlowAlpha: 0.32,   // warm light that lingers where the grand shell opened
     smoke: [150, 150, 175], smokeAlpha: 0.1,
@@ -52,10 +56,10 @@ export const THEME = {
       [1.15, 'main', 0.22, 'gold', 1.6, 'grand'],
       [1.85, 0.16, 0.30, 'white', 0.62, 'chrys'],
       [2.20, 0.84, 0.26, 'silver', 0.66, 'chrys'],
+      [2.40, 'head', 'aboveHead', 'gold', 1.5, 'cascade'],
       [2.85, 0.50, 0.10, 'gold', 1.45, 'willow'],
       [3.45, 0.20, 0.20, 'gold', 0.7, 'peony'],
       [3.75, 0.80, 0.18, 'amber', 0.7, 'peony'],
-      [4.35, 'head', 'aboveHead', 'gold', 1.0, 'cascade'],
       [4.60, 0.30, 0.16, 'white', 0.55, 'chrys'],
       [4.75, 0.72, 0.14, 'white', 0.55, 'chrys'],
     ],
