@@ -32,7 +32,9 @@ export const THEME = {
   flare: { core: [255, 245, 220], mid: [255, 190, 110], life: 0.42, size: 4.2, rays: 6 },
   mouthGlow: { color: [255, 190, 120], pulseAlpha: 0, laughAlpha: 0 },
   // water on the lens while it rains: a few drops stick, then slide down leaving a faint trail (≤ max sprites per frame)
-  lens: { max: 12, rate: 3, size: [16, 34] },
+  lens: { max: 16, rate: 4.5, size: [24, 48] },
+  // big soft out-of-focus light circles right in front of the lens, lit by each burst (mid/high tiers)
+  bokeh: { perBurst: 3, max: 16, size: [34, 95], alpha: [0.35, 0.6], life: [1.8, 3.0] },
   fireworks: {
     colors: {
       gold: [255, 190, 90], amber: [255, 140, 60], white: [255, 244, 225], silver: [205, 220, 255],

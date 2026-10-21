@@ -244,7 +244,18 @@ export class ChainRainEffect {
     const puffs = this.quality > 0.6 ? 6 : 0;
     for (let k = 0; k < puffs; k++) this.smoke.push({ x: x + this._r(-0.5, 0.5) * R, y: y + this._r(-0.4, 0.5) * R, r: this._r(0.25, 0.55) * R, age: 0, life: this._r(5, 8), vx: this._r(-12, 22) * S, vy: this._r(-10, 6) * S });
     this.flashes.push({ x, y, col, age: 0, s: size });
+    this._bokeh(x, y, col, size);
     this.onEvent('burst', { x: x / this.W, y: y / this.H, size, kind });
+  }
+  /** Out-of-focus light circles very close to the lens, lit by a burst (a few big soft discs, mid/high tiers). */
+  _bokeh(x, y, col, size) {
+    const B = this.theme.bokeh; if (!B || this.quality < 0.6) return;
+    if (!this.bokeh) this.bokeh = [];
+    const n = Math.round(B.perBurst * size), S = this.S;
+    for (let k = 0; k < n && this.bokeh.length < B.max; k++) {
+      const c = this.rand() < 0.35 ? this.theme.fireworks.colors.white : col;
+      this.bokeh.push({ x: x + this._r(-0.45, 0.45) * this.W, y: y + this._r(-0.05, 0.55) * this.H, r: this._r(B.size[0], B.size[1]) * S, col: c, age: -this._r(0, 0.4), life: this._r(B.life[0], B.life[1]), vx: this._r(-12, 12) * S, vy: this._r(6, 22) * S, a: this._r(B.alpha[0], B.alpha[1]) });
+    }
   }
 
   // ---------- simulation ----------
@@ -300,6 +311,7 @@ export class ChainRainEffect {
     }
     this._debris(dt);
     this._lensUpdate(dt);
+    if (this.bokeh) for (let i = this.bokeh.length - 1; i >= 0; i--) { const b = this.bokeh[i]; b.age += dt; if (b.age > b.life) { drop(this.bokeh, i); continue; } if (b.age > 0) { b.x += b.vx * dt; b.y += b.vy * dt; } }
     for (let i = this.smoke.length - 1; i >= 0; i--) { const m = this.smoke[i]; m.age += dt; if (m.age > m.life) { drop(this.smoke, i); continue; } m.x += m.vx * dt; m.y += m.vy * dt; m.r += 6 * S * dt; }
     for (let i = this.flashes.length - 1; i >= 0; i--) { this.flashes[i].age += dt; if (this.flashes[i].age > 1.4) drop(this.flashes, i); }
     for (let i = this.glows.length - 1; i >= 0; i--) { this.glows[i].age += dt; if (this.glows[i].age > this.glows[i].life) drop(this.glows, i); }
@@ -441,6 +453,11 @@ export class ChainRainEffect {
     this._drawEmbers(ctx, true); this._drawFlares(ctx, true);
     this._drawDebris(ctx);
     this._drawGlow(ctx);
+    if (this.bokeh) for (const b of this.bokeh) {
+      if (b.age <= 0) continue; const k = b.age / b.life, al = b.a * Math.min(1, k * 5) * Math.pow(1 - k, 1.3);
+      ctx.globalAlpha = al; ctx.drawImage(this._sprite('disc', b.col), b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+    }
+    ctx.globalAlpha = 1;
     for (const p of this.splash) {
       const f = 1 - p.age / p.life;
       if (p.glint) { ctx.globalAlpha = (p.warm ? 0.9 : T.splash.glintAlpha) * f; const s = p.r * 6; ctx.drawImage(this._sprite('glow', p.warm ? T.fireworks.colors.gold : T.splash.color), p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1; }
@@ -652,7 +669,7 @@ export class ChainRainEffect {
     for (const d of this.lens) {
       const a = Math.min(1, d.age / 0.25) * (1 - d.out);
       if (d.y - d.y0 > d.r) {   // trail: thin wet streak above the moving drop
-        c.globalAlpha = a * 0.5; c.strokeStyle = 'rgba(210,225,245,0.18)'; c.lineWidth = d.r * 0.5;
+        c.globalAlpha = a * 0.8; c.strokeStyle = 'rgba(215,228,248,0.26)'; c.lineWidth = d.r * 0.55;
         c.beginPath(); c.moveTo(d.x, d.y0); c.lineTo(d.x, d.y - d.r * 0.6); c.stroke();
       }
       c.globalAlpha = a; c.drawImage(sp, d.x - d.r, d.y - d.r * 1.1, d.r * 2, d.r * 2.2);
@@ -663,7 +680,7 @@ export class ChainRainEffect {
     if (this._lensSp) return this._lensSp;
     const c = document.createElement('canvas'); c.width = 64; c.height = 70; const x = c.getContext('2d');
     const g = x.createRadialGradient(32, 38, 4, 32, 36, 30);
-    g.addColorStop(0, 'rgba(235,242,255,0.10)'); g.addColorStop(0.7, 'rgba(200,215,235,0.12)'); g.addColorStop(0.88, 'rgba(10,16,30,0.32)'); g.addColorStop(1, 'rgba(10,16,30,0)');
+    g.addColorStop(0, 'rgba(235,242,255,0.16)'); g.addColorStop(0.68, 'rgba(205,220,240,0.2)'); g.addColorStop(0.86, 'rgba(10,16,30,0.5)'); g.addColorStop(1, 'rgba(10,16,30,0)');
     x.fillStyle = g; x.beginPath(); x.ellipse(32, 36, 30, 33, 0, 0, 6.283); x.fill();
     x.fillStyle = 'rgba(255,255,255,0.75)'; x.beginPath(); x.ellipse(23, 24, 6, 4, -0.6, 0, 6.283); x.fill();
     x.fillStyle = 'rgba(255,255,255,0.35)'; x.beginPath(); x.ellipse(40, 52, 7, 2.5, 0.3, 0, 6.283); x.fill();
