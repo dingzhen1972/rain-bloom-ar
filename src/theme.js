@@ -10,11 +10,12 @@
 export const THEME = {
   rain: {
     color: [232, 241, 255],
-    alphaNear: [0.14, 0.24],   // drops right in front of the lens (out of focus)
+    alphaNear: [0.08, 0.15],   // drops right in front of the lens (out of focus)
     alphaOnPerson: 0.7,         // drops that land on the head / shoulders
-    near: 0.32,                 // share of drops between the lens and the person (drawn over them; the closest quarter soft and faint)
-    alphaFront: [0.42, 0.62],   // drops in front of the person but not hugging the lens
-    onPerson: 0.24,             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
+    near: 0.16,                 // share of drops between the lens and the person (drawn over them; the closest quarter soft and faint)
+    alphaFront: [0.2, 0.34],    // drops in front of the person but not hugging the lens
+    onPerson: 0.24,
+    wind: -0.07,                // slight slant: horizontal drift per unit of fall (negative = leans left)             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
     alphaFar: [0.86, 0.36],     // from 0.5 m to the far distance (fog)
     dropWidth: 0.0019,          // physical drop diameter in metres (drives on-screen thickness)
     darkHalo: 0.16,             // soft dark edge that keeps rain readable on bright walls

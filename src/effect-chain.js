@@ -133,7 +133,7 @@ export class ChainRainEffect {
     else if (u < R.near + R.onPerson && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
     else if (u < 0.7) z = this._r(zp + 0.3, 4.5);
     else z = this._r(4.5, Z_FAR);
-    if (x === undefined) x = this._r(-0.05, 1.05) * this.W;
+    if (x === undefined) x = this._r(-0.05, 1.05) * this.W - (R.wind || 0) * this.H * 0.6;   // upwind start so the slant fills the frame
     const v = (this.f * FALL / z) * this._r(0.9, 1.1);
     const len = Math.min(v * SHUTTER, this.H * 0.32);   // a lens-hugging drop reads as a soft streak, not a scratch across the frame
     const w = clamp(this.f * R.dropWidth / z, 0.55 * this.S, 11 * this.S);
@@ -271,7 +271,7 @@ export class ChainRainEffect {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i], py = d.y;
       if (bloom && this.tau >= d.ig) { this._igniteDrop(d); drop(this.drops, i); continue; }
-      d.y += d.v * dt * this.ts;
+      d.y += d.v * dt * this.ts; d.x += d.v * dt * this.ts * (this.theme.rain.wind || 0);
       let gone = d.y - d.len > this.H;
       if (!gone && d.band) { const top = this._top(d.x); if (py < top && d.y >= top) { if (!bloom) this._splash(d.x, top); gone = true; } }
       if (!gone && !bloom && this.drops.length > goal * 1.05 && this.rand() < dt * 2) gone = true;   // rain easing off
@@ -464,30 +464,31 @@ export class ChainRainEffect {
 
   _drawRain(c, front) {
     const R = this.theme.rain, S = this.S, slow = 1 - this.ts;
-    const thin = new Map(), halo = [];
+    const thin = new Map(), halo = [], wd = R.wind || 0, M = c.getTransform();
     const streak = this._sprite('streak', R.color), glintS = this._sprite('streak', R.glint);
     for (const d of this.drops) {
       if (d.near !== front) continue;
       const len = Math.max(d.w * 2, d.len * (1 - slow * 0.85));
       const gl = this.time - d.glint, glint = gl > 0 && gl < 0.22 ? 1 - gl / 0.22 : 0;
-      if (front) { c.globalAlpha = d.a; c.drawImage(streak, d.x - d.w * 1.2, d.y - len, d.w * 2.4, len); continue; }
+      if (front) { c.globalAlpha = d.a; c.setTransform(M); c.transform(1, 0, wd, 1, -wd * d.y, 0); c.drawImage(streak, d.x - d.w * 1.2, d.y - len, d.w * 2.4, len); continue; }
       const tp = this._top(d.x), bottom = Math.min(d.y, d.band ? tp : tp - this.theme.fireworks.behindFade * this.H * d.h * 0.6), top = d.y - len;   // far rain fades out at varied heights above the person, no hard line   // the part behind the person is not drawn
       if (bottom <= top) continue;
-      if (d.z < 3 && !d.band) halo.push(d.x, top, bottom);
-      if (!glint && d.w < 1.4 * S) { const k = Math.round(d.a * 12); let arr = thin.get(k); if (!arr) thin.set(k, (arr = [])); arr.push(d.x, top, bottom); continue; }
+      const xt = d.x - wd * (d.y - top), xb = d.x - wd * (d.y - bottom);
+      if (d.z < 3 && !d.band) halo.push(xt, top, xb, bottom);
+      if (!glint && d.w < 1.4 * S) { const k = Math.round(d.a * 12); let arr = thin.get(k); if (!arr) thin.set(k, (arr = [])); arr.push(xt, top, xb, bottom); continue; }
       c.globalAlpha = Math.min(1, d.a + glint * 0.5);
       const w = d.w * (1 + glint * 0.8) * 1.6, sh = (bottom - top) / len;
-      c.drawImage(glint ? glintS : streak, 0, 0, 8, 128 * sh, d.x - w / 2, top, w, bottom - top);
+      c.setTransform(M); c.transform(1, 0, wd, 1, -wd * bottom, 0); c.drawImage(glint ? glintS : streak, 0, 0, 8, 128 * sh, xb - w / 2, top, w, bottom - top);
     }
-    c.globalAlpha = 1; c.lineCap = 'round';
+    c.setTransform(M); c.globalAlpha = 1; c.lineCap = 'round';
     if (halo.length) {
       c.strokeStyle = `rgba(8,12,26,${R.darkHalo})`; c.lineWidth = 2.2 * S; c.beginPath();
-      for (let i = 0; i < halo.length; i += 3) { c.moveTo(halo[i] + 1.2 * S, halo[i + 1]); c.lineTo(halo[i] + 1.2 * S, halo[i + 2]); }
+      for (let i = 0; i < halo.length; i += 4) { c.moveTo(halo[i] + 1.2 * S, halo[i + 1]); c.lineTo(halo[i + 2] + 1.2 * S, halo[i + 3]); }
       c.stroke();
     }
     for (const [k, arr] of thin) {
       c.strokeStyle = rgba(R.color, k / 12); c.lineWidth = 1 * S; c.beginPath();
-      for (let i = 0; i < arr.length; i += 3) { c.moveTo(arr[i], arr[i + 1]); c.lineTo(arr[i], arr[i + 2]); }
+      for (let i = 0; i < arr.length; i += 4) { c.moveTo(arr[i], arr[i + 1]); c.lineTo(arr[i + 2], arr[i + 3]); }
       c.stroke();
     }
   }
