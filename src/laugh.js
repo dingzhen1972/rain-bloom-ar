@@ -91,10 +91,10 @@ export class LaughDetector {
       runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
       minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4, minTrackingConfidence: 0.4,
     });
-    // Some phones (seen on Honor) hang forever creating the GPU delegate. Try it for 2.5 s; if it hangs,
-    // remember that on this device and go straight to the CPU next time.
+    // Some phones (seen on Honor) hang forever creating the GPU delegate. Probe it briefly; if it hangs,
+    // remember that on this device and go straight to the CPU on every later visit.
     let noGpu = false; try { noGpu = localStorage.getItem('rb-nogpu') === '1'; } catch (_) {}
-    if (!noGpu) { try { this.lm = await withTimeout(make('GPU'), 2500, 'GPU timeout'); this.delegate = 'GPU'; } catch (_) { try { localStorage.setItem('rb-nogpu', '1'); } catch (e) {} } }
+    if (!noGpu) { try { this.lm = await withTimeout(make('GPU'), 1500, 'GPU timeout'); this.delegate = 'GPU'; } catch (_) { try { localStorage.setItem('rb-nogpu', '1'); } catch (e) {} } }
     if (!this.lm) { this.lm = await make('CPU'); this.delegate = 'CPU'; this.segEvery = Math.max(this.segEvery, 4); }
     // face recognition is all that's needed to start; the person outline joins a moment later in the background
     this.progress = 1; this.ready = true; onStatus(''); this.timings.ready = Math.round(performance.now() - this._t0);

@@ -180,9 +180,9 @@ function loop(now) {
 
 function drawUI(now, dt) {
   const T = THEME.hud;
-  const hint = mode === 'demo' ? '轻点屏幕' : !detector.ready ? (detector.error ? '识别不可用 · 轻点屏幕' : `载入中 ${Math.round(detector.progress * 100)}%`) : noFace > 1.5 ? '把脸放进画面' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
+  const hint = mode === 'demo' ? '轻点屏幕' : !detector.ready ? (detector.error ? '识别不可用 · 轻点屏幕' : detector.progress >= 0.99 ? '即将就绪' : `载入中 ${Math.round(detector.progress * 100)}%`) : noFace > 1.5 ? '把脸放进画面' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
   idleTime = fx.busy ? 0 : idleTime + dt; if (fx.busy) bloomedOnce = true;
-  const want = !detector.ready || mode === 'demo' || noFace > 1.5 ? 1 : fx.busy ? 0 : idleTime > (bloomedOnce ? 10 : 0.5) ? 1 : 0;
+  const want = !detector.ready || mode === 'demo' || noFace > 1.5 ? 1 : fx.busy ? 0 : idleTime > (bloomedOnce ? 1.5 : 0.5) ? 1 : 0;   // guidance returns after each round
   hintA += (want - hintA) * Math.min(1, dt * 3);
   const rec = recorder && recorder.state === 'recording' ? fmt((performance.now() - recStart) / 1000) : '';
   const icon = hint === T.hintSmile ? 'smile' : hint === T.hintLaugh ? 'laugh' : null;
@@ -325,9 +325,12 @@ function backToStart() {
 // so nobody lands in the camera with recognition still missing. On failure Start unlocks with tap-to-trigger.
 function loadModels() { if (!detector.ready && !detector.error) detector.init(); }
 function startButton() {
-  const b = $('btnCamera'), ok = detector.ready || !!detector.error;
-  b.disabled = !ok; b.lastElementChild.textContent = ok ? '开始' : `载入中 ${Math.round(detector.progress * 100)}%`;
-  b.firstElementChild.style.width = ok ? '0' : `${(detector.progress * 100).toFixed(1)}%`;
+  const b = $('btnCamera'), ok = detector.ready || !!detector.error, p = detector.progress;
+  // once the bytes are in, the phone still has to start the model (seconds on some devices):
+  // say so instead of parking the number at 99%
+  b.disabled = !ok; b.lastElementChild.textContent = ok ? '开始' : p >= 0.99 ? '即将就绪' : `载入中 ${Math.round(p * 100)}%`;
+  b.firstElementChild.style.width = ok ? '0' : `${(p * 100).toFixed(1)}%`;
+  b.classList.toggle('warming', !ok && p >= 0.99);
   if (!ok) setTimeout(startButton, 200);
 }
 

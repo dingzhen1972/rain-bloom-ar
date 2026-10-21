@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#05070f">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>雨落成花 · 笑出声，雨就变成烟花</title>
+  <title>雨落成花</title>
   <meta name="description" content="一个网页 AR 特效：静止时下雨，笑出声时，雨从你的嘴边开始被点燃，变成满屏烟花。">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2305070f'/><g stroke='%23ffd27a' stroke-width='3' stroke-linecap='round'><path d='M32 32l0-14M32 32l12-8M32 32l12 8M32 32l0 14M32 32l-12 8M32 32l-12-8'/></g><g stroke='%23bfe6ff' stroke-width='2' stroke-linecap='round'><path d='M14 8v8M50 6v8M8 44v8M56 40v8'/></g></svg>">
   <link rel="stylesheet" href="./src/style.css">
@@ -21,14 +21,12 @@
     </section>
 
     <section id="done" class="panel" hidden>
-      <p class="eyebrow">EXPORT</p>
-      <h2>成片已生成</h2>
       <video id="result" playsinline controls loop></video>
-      <div class="actions">
-        <a id="download" class="primary" download>保存视频</a>
-        <button id="btnAgain" class="ghost">再来一次</button>
-      </div>
       <p class="fine" id="resultInfo"></p>
+      <div class="actions">
+        <a id="download" download>保存视频</a>
+        <button id="btnAgain">再来一次</button>
+      </div>
     </section>
 
     <nav id="bar" hidden>
