@@ -409,7 +409,8 @@ export class ChainRainEffect {
     const G = this.theme.grade;
     let flash = 0;   // each burst briefly lifts the darkening: the whole scene (and the person) lights up, at zero extra cost
     for (const f of this.flashes) flash += (f.age < 0.06 ? f.age / 0.06 : Math.pow(1 - f.age / 1.4, 2.4)) * Math.min(1.2, f.s) * this.theme.fireworks.flashAlpha * 2.2;
-    const lvl = Math.round(clamp(this.gradeV - Math.min(0.45, flash)) * 15);
+    this._flashS = (this._flashS || 0) + (Math.min(0.25, flash * 0.5) - (this._flashS || 0)) * 0.12;   // eased and capped: no brightness pumping
+    const lvl = Math.round(clamp(this.gradeV - this._flashS) * 15);
     if (!this._grade || this._grade.W !== this.W) this._grade = { W: this.W, cache: [] };
     let c = this._grade.cache[lvl];
     if (!c) {
@@ -543,7 +544,7 @@ export class ChainRainEffect {
     const buckets = new Map();
     for (const p of this.stars) {
       const f = 1 - p.age / p.life;
-      let al = Math.pow(f, 1.1); if (p.strobe && p.age > 0.9) al *= Math.sin(this.time * 40 + p.k) > 0.2 ? 1 : 0.1;
+      let al = Math.pow(f, 1.1); if (p.strobe && p.age > 0.9) al *= 0.75 + 0.25 * Math.sin(this.time * 14 + p.k);   // soft glitter, not an on/off strobe
       // white-hot at birth → its own colour → cools to ember red at the end (quantised so draws stay batched)
       let c = p.age < 0.25 ? mix(white, p.col, Math.round((p.age / 0.25) * 3) / 3) : p.col;
       if (p.fade && f < 0.45) c = mix(p.col, p.fade, Math.round(((0.45 - f) / 0.45) * 3) / 3);
@@ -567,7 +568,7 @@ export class ChainRainEffect {
           L.fillStyle = rgba(col, Math.min(1, al * (half ? 0.45 : 0.95))); L.beginPath();
           for (const p of arr) {
             const t = p.tr, n = t.length, mid = (n >> 2) << 1; if (n < 6) continue;
-            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { const hb = frac(p.k + j * 0.618); if (frac(hb * 5.3 + this.time * 2.2) < 0.22) continue;   // beads twinkle
+            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { const hb = frac(p.k + j * 0.618); if (frac(hb * 5.3 + this.time * 0.9) < 0.1) continue;   // beads twinkle
               if (!this._behind(t[j], t[j + 1], hb)) { const rb = r * (p.dz || 1); L.rect(t[j] - rb, t[j + 1] - rb, rb * 2, rb * 2); } }
           }
           L.fill();
@@ -620,7 +621,7 @@ export class ChainRainEffect {
     for (const p of this.debris) {
       p.hid = (p.z ?? 0.5) < 0 && this._hidden(p.x, p.y);   // behind the head / body: covered by the person
       if (p.hid) continue;
-      const f = 1 - p.age / p.life; p.a = Math.min(1, f * 1.4) * (0.7 + 0.3 * Math.sin(this.time * 25 + p.x));
+      const f = 1 - p.age / p.life; p.a = Math.min(1, f * 1.4) * (0.88 + 0.12 * Math.sin(this.time * 9 + p.x));
       paths[Math.min(L - 1, Math.floor(p.a * L))].push(p);
     }
     c.lineCap = 'round'; c.lineWidth = 2.2 * S;
@@ -669,7 +670,7 @@ export class ChainRainEffect {
     for (const d of this.lens) {
       const a = Math.min(1, d.age / 0.25) * (1 - d.out);
       if (d.y - d.y0 > d.r) {   // trail: thin wet streak above the moving drop
-        c.globalAlpha = a * 0.8; c.strokeStyle = 'rgba(215,228,248,0.26)'; c.lineWidth = d.r * 0.55;
+        c.globalAlpha = a * 0.45; c.strokeStyle = 'rgba(215,228,248,0.2)'; c.lineWidth = d.r * 0.4;
         c.beginPath(); c.moveTo(d.x, d.y0); c.lineTo(d.x, d.y - d.r * 0.6); c.stroke();
       }
       c.globalAlpha = a; c.drawImage(sp, d.x - d.r, d.y - d.r * 1.1, d.r * 2, d.r * 2.2);
