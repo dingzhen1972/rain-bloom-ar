@@ -208,7 +208,7 @@ export class ChainRainEffect {
       const n = Math.round(150 * size * (0.4 + 0.6 * this.quality));
       for (let k = 0; k < n; k++) {
         const a = this._r(0, 6.283), s = this._r(0.2, 1) * 0.75 * R;
-        this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.5 - 90 * S, age: 0, life: this._r(2.6, 3.6), col: mix(col, F.colors.white, this._r(0, 0.4)), r: this._r(1.6, 2.8) * S, hits: 0, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7) });
+        this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.5 - 90 * S, age: 0, life: this._r(2.6, 3.6), col: mix(col, F.colors.white, this._r(0, 0.4)), r: this._r(1.6, 2.8) * S, hits: 0, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7), z: this._r(-0.7, 1) });
       }
       this.flashes.push({ x, y, col, age: 0, s: size * 0.8 });
       this.onEvent('burst', { x: x / this.W, y: y / this.H, size, kind });
@@ -311,11 +311,23 @@ export class ChainRainEffect {
     for (let k = 0; k < m; k++) {
       const a = this._r(0, 6.283), s = this._r(0.35, 1) * 0.95 * R;
       this.debris.push({ x, y, px: x, py: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6 - 40 * S, age: 0, life: this._r(2.4, 3.4),
-        col: mix(col, F.colors.white, this._r(0, 0.35)), r: this._r(1.8, 3.0) * S, hits: 0, wht: this.rand() < 0.25, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7) });
+        col: mix(col, F.colors.white, this._r(0, 0.35)), r: this._r(1.8, 3.0) * S, hits: 0, wht: this.rand() < 0.25, dep: this._r(0, 0.03) * this.H, e: this._r(0.3, 0.7), z: this._r(-0.5, 1) });
     }
   }
 
   // golden cascade sparks: gravity, air drag, and collisions with the person's outline (which can move)
+  _headBox() { const f = this.face; return f ? { cx: f.cx, cy: f.cy - f.ry * 0.35, a: f.rx * 1.35, b: f.ry * 1.7 } : null; }
+  _overHead(x) { const h = this._headBox(); return !!h && Math.abs(x - h.cx) < h.a; }
+  _head3d(x, z) {
+    const h = this._headBox(); if (!h) return null;
+    const s2 = 1 - z * z; if (s2 <= 0.04) return null;
+    const s = Math.sqrt(s2), a = h.a * s, b = h.b * s, dx = x - h.cx;
+    if (Math.abs(dx) >= a) return null;
+    const top = h.cy - b * Math.sqrt(1 - (dx / a) ** 2);
+    let nx = dx / (a * a), ny = (top - h.cy) / (b * b); const l = Math.hypot(nx, ny) || 1;
+    return { top, nx: nx / l, ny: ny / l };
+  }
+
   _debris(dt) {
     const S = this.S, g = 900 * S, e = 0.45, mu = 0.12;
     for (let i = this.debris.length - 1; i >= 0; i--) {
@@ -324,14 +336,20 @@ export class ChainRainEffect {
       p.px = p.x; p.py = p.y;
       const k = Math.exp(-0.9 * dt); p.vx *= k; p.vy = p.vy * k + g * dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
-      // a spark lands on the head's upper surface, which projects a little inside the silhouette edge:
-      // each spark gets its own contact depth, so landed sparks don't trace the outline as one bright line
-      const top = this._top(p.x) + (p.dep ?? 0);
-      if (top !== Infinity && p.y >= top - 0.5) {
-        // surface normal from the outline slope; surface velocity from how the outline moved since last frame
+      // 3D contact: each spark has a depth z (-1 back … +1 front, in head radii). The head is an ellipsoid built
+      // from the face box; a spark at depth z meets the head's cross-section at that depth, so front sparks land
+      // on the near side of the hair (inside the silhouette), sparks at the sides miss it, back ones hit the hidden
+      // back of the head. Outside the head's width the person outline (shoulders) is used, for sparks not behind.
+      const hd = this._head3d(p.x, p.z ?? 0.5);
+      let top = Infinity, nx = 0, ny = -1;
+      if (hd) { top = hd.top; nx = hd.nx; ny = hd.ny; }
+      else if (!this._overHead(p.x) && (p.z ?? 0.5) > -0.3) {
+        top = this._top(p.x) + (p.dep ?? 0);
         const h = 6 * S, slope = (this._top(p.x + h) - this._top(p.x - h)) / (2 * h);
-        let nx = slope, ny = -1; const nl = Math.hypot(nx, ny); nx /= nl; ny /= nl;
+        nx = slope; ny = -1; const nl = Math.hypot(nx, ny); nx /= nl; ny /= nl;
         if (!Number.isFinite(nx)) { nx = 0; ny = -1; }
+      }
+      if (top !== Infinity && p.y >= top - 0.5) {
         const sv = { x: this.faceV.x * 0.6, y: Math.min(0, this._topVel(p.x)) };       // a rising head pushes sparks up
         const rvx = p.vx - sv.x, rvy = p.vy - sv.y, vn = rvx * nx + rvy * ny;
         if (vn < 0) {
@@ -569,7 +587,7 @@ export class ChainRainEffect {
         const f = 1 - p.age / p.life; if (f < 0.15 || p.age < 0.2) continue; const r = Math.max(1, p.w * (p.dz || 1) * 3.2 * k * f);   // fresh bursts skip the glow: no white disc
         g.rect(p.x * k - r, p.y * k - r, r * 2, r * 2);
       }
-      if (!list) for (const p of this.debris) { const r = Math.max(1, p.r * 3.2 * k); g.rect(p.x * k - r, p.y * k - r, r * 2, r * 2); }
+      if (!list) for (const p of this.debris) { if (p.hid) continue; const r = Math.max(1, p.r * 3.2 * k); g.rect(p.x * k - r, p.y * k - r, r * 2, r * 2); }
       g.fill();
     }
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = F.glowAlpha; ctx.imageSmoothingEnabled = true;
@@ -581,6 +599,8 @@ export class ChainRainEffect {
     const F = this.theme.fireworks, S = this.S, L = 4, paths = [];
     for (let i = 0; i < L; i++) paths.push([]);
     for (const p of this.debris) {
+      p.hid = (p.z ?? 0.5) < 0 && this._hidden(p.x, p.y);   // behind the head / body: covered by the person
+      if (p.hid) continue;
       const f = 1 - p.age / p.life; p.a = Math.min(1, f * 1.4) * (0.7 + 0.3 * Math.sin(this.time * 25 + p.x));
       paths[Math.min(L - 1, Math.floor(p.a * L))].push(p);
     }
@@ -592,7 +612,7 @@ export class ChainRainEffect {
       c.stroke();
     }
     const gs = this._sprite('glow', F.colors.gold), ws = this._sprite('glow', F.colors.white);
-    for (const p of this.debris) { c.globalAlpha = p.a; const s = p.r * 5; c.drawImage(p.wht ? ws : gs, p.x - s / 2, p.y - s / 2, s, s); }
+    for (const p of this.debris) { if (p.hid) continue; c.globalAlpha = p.a; const s = p.r * (4 + 1.6 * (p.z ?? 0.5)); c.drawImage(p.wht ? ws : gs, p.x - s / 2, p.y - s / 2, s, s); }
     c.globalAlpha = 1;
   }
 
