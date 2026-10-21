@@ -185,16 +185,18 @@ function drawUI(now, dt) {
   const want = !detector.ready || mode === 'demo' || noFace > 1.5 ? 1 : fx.busy ? 0 : idleTime > (bloomedOnce ? 10 : 0.5) ? 1 : 0;
   hintA += (want - hintA) * Math.min(1, dt * 3);
   const rec = recorder && recorder.state === 'recording' ? fmt((performance.now() - recStart) / 1000) : '';
-  drawHUD(ctx, W, H, { score: ctrl.score, state: ctrl.state, threshold: ctrl.triggerScore, hint, hintAlpha: hintA, time: now / 1000, rec });
+  const icon = hint === T.hintSmile ? 'smile' : hint === T.hintLaugh ? 'laugh' : null;
+  drawHUD(ctx, W, H, { score: ctrl.score, state: ctrl.state, threshold: ctrl.triggerScore, hint, icon, hintAlpha: hintA, time: now / 1000, rec });
 }
 function fmt(s) { return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
 function debugOverlay() {
-  ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, H * 0.3, W * 0.66, 190);
+  ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, H * 0.3, W * 0.9, 220);
   ctx.fillStyle = '#9f9'; ctx.font = `${Math.round(W / 40)}px monospace`;
   const s = lastSample || {};
   [`${tier.name} ${W}x${H}  fps ${gov.fps.toFixed(0)}  q ${fx.quality.toFixed(2)}`, `detect ${stats.detectMs.toFixed(1)}ms / ${detectEvery.toFixed(0)}ms  seg ${detector.seg ? 'on' : 'off'}`,
     `score ${ctrl.score.toFixed(2)} ${ctrl.state}  smile ${ctrl.rel.smile.toFixed(2)} jaw ${ctrl.rel.jaw.toFixed(2)}`, `raw smile ${(s.smile || 0).toFixed(2)} jaw ${(s.jaw || 0).toFixed(2)}`,
-    `drops ${fx.drops.length} embers ${fx.embers.length} stars ${fx.stars.length} sparks ${fx.debris.length}`]
+    `drops ${fx.drops.length} embers ${fx.embers.length} stars ${fx.stars.length} sparks ${fx.debris.length}`,
+    `load ms ${JSON.stringify(detector.timings)} ${detector.delegate || ''}`]
     .forEach((l, i) => ctx.fillText(l, 12, H * 0.3 + 30 + i * 32));
   ctx.restore();
 }
@@ -339,17 +341,32 @@ canvas.addEventListener('click', () => { if (mode && (mode === 'demo' || detecto
 addEventListener('keydown', (e) => { if (!mode) return; if (e.code === 'Space') { e.preventDefault(); window.__rainbloom.force(); } if (e.key === 'h') fx.pulse(1); });
 // background tab: rAF stops by itself; pause video; on return, no giant time step
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { if (mode === 'video' && !src.paused) src.pause(); }
-  else { lastT = 0; if (mode === 'video' && !videoEnded && src.paused && running) src.play().catch(() => {}); }
+  if (document.hidden) { sfx.pause(); if (mode === 'video' && !src.paused) src.pause(); }
+  else { lastT = 0; if (mode) sfx.resume(); if (mode === 'video' && !videoEnded && src.paused && running) src.play().catch(() => {}); }
 });
-window.addEventListener('pagehide', () => { if (stream) stream.getTracks().forEach((t) => t.stop()); });
+window.addEventListener('pagehide', () => { sfx.pause(); if (stream) stream.getTracks().forEach((t) => t.stop()); });
 if (inApp) toast('在 App 内置浏览器里摄像头可能不可用，建议「在浏览器打开」', 6000);
 
 // idle: rain behind the start panel, so the page is alive at once
+// Cover: near-black, a faint veil of rain. Deliberately cheap (a few dozen lines at 30 fps) so the phone's CPU
+// goes to loading the models, not to the cover.
+const coverRain = Array.from({ length: 46 }, () => ({ x: Math.random(), y: Math.random(), v: 0.5 + Math.random() * 0.7, l: 0.04 + Math.random() * 0.07, a: 0.05 + Math.random() * 0.11 }));
+let coverBg = null, coverAcc = 0;
 function idle(now) {
   if (running) return;
   const dt = Math.min(0.05, lastT ? (now - lastT) / 1000 : 1 / 30); lastT = now;
-  fx.setMood(1); drawDemoBackground(); fx.update(dt); ctx.drawImage(frameBuf, 0, 0); fx.drawGrade(ctx); fx.draw(ctx);
+  coverAcc += dt; if (coverAcc < 1 / 30) { requestAnimationFrame(idle); return; }
+  const step = coverAcc; coverAcc = 0;
+  if (!coverBg) {
+    coverBg = document.createElement('canvas'); coverBg.width = W; coverBg.height = H; const c = coverBg.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#030407'); g.addColorStop(0.55, '#07090f'); g.addColorStop(1, '#0b0d14'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const v = c.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, H * 0.55); v.addColorStop(0, 'rgba(120,140,180,0.07)'); v.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = v; c.fillRect(0, 0, W, H);
+  }
+  ctx.drawImage(coverBg, 0, 0); ctx.lineWidth = Math.max(1, W / 900); ctx.lineCap = 'round';
+  for (const d of coverRain) {
+    d.y += d.v * step; d.x -= d.v * step * 0.07 * (H / W); if (d.y - d.l > 1) { d.y = -0.02; d.x = Math.random() * 1.1; }
+    ctx.strokeStyle = `rgba(200,212,235,${d.a})`; ctx.beginPath(); ctx.moveTo(d.x * W + d.l * H * 0.07, (d.y - d.l) * H); ctx.lineTo(d.x * W, d.y * H); ctx.stroke();
+  }
   requestAnimationFrame(idle);
 }
 function startIdle() { lastT = 0; fx.setFace(null); fx.setSilhouette(null); silOut = null; requestAnimationFrame(idle); }

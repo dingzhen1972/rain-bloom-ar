@@ -53,12 +53,12 @@ const simdOK = (() => { try { return WebAssembly.validate(new Uint8Array([0, 97,
 const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, j) => setTimeout(() => j(new Error(msg)), ms))]);
 
 export class LaughDetector {
-  constructor(opts = {}) { this.ready = false; this.loading = false; this.lastTs = -1; this.lm = null; this.seg = null; this.error = null; this.segEvery = opts.segEvery || 2; this.progress = 0; this._p = {}; }
+  constructor(opts = {}) { this.ready = false; this.loading = false; this.lastTs = -1; this.lm = null; this.seg = null; this.error = null; this.segEvery = opts.segEvery || 2; this.progress = 0; this._p = {}; this.timings = {}; }
 
   /** Safe to call early (e.g. on page load) and more than once: later calls share the same load. */
   init(onStatus = () => {}) {
     if (this._init) return this._init;
-    this.loading = true; this._last = performance.now();
+    this.loading = true; this._last = this._t0 = performance.now();
     // fail only when nothing has arrived for a long time (a slow but moving download is fine)
     const stall = new Promise((_, j) => { const t = setInterval(() => { if (this.ready || this.error) clearInterval(t); else if (performance.now() - this._last > 25000) { clearInterval(t); j(new Error('模型下载停滞')); } }, 1000); });
     this._init = Promise.race([this._load(onStatus), stall]).then(() => true, (e) => { this.error = e; this.ready = false; onStatus(''); console.warn('[LaughDetector]', e); return false; })
@@ -77,11 +77,13 @@ export class LaughDetector {
     const wasmBase = (await fastest(WASM_CANDIDATES.map((w) => `${w}/${wasmFile}`))).replace(/\/[^/]+$/, '');
     const modelUrl = await fastest(MODEL_CANDIDATES), segUrl = abs(SEG_MODEL_CANDIDATES[0]);
     // the three downloads run in parallel; progress is the sum of their bytes
+    this.timings.start = Math.round(performance.now() - this._t0);
     const [, modelBuf, segBuf] = await Promise.all([
       download(`${wasmBase}/${wasmFile}`, SIZES.wasm, (g, t) => this._bytes('wasm', g, t)),
       download(modelUrl, SIZES.model, (g, t) => this._bytes('model', g, t)),
       download(segUrl, SIZES.seg, (g, t) => this._bytes('seg', g, t)).catch(() => null),
     ]);
+    this.timings.downloaded = Math.round(performance.now() - this._t0);
     const fileset = await vision.FilesetResolver.forVisionTasks(wasmBase);
     onStatus('启动识别…');
     const make = (delegate) => vision.FaceLandmarker.createFromOptions(fileset, {
@@ -94,15 +96,18 @@ export class LaughDetector {
     let noGpu = false; try { noGpu = localStorage.getItem('rb-nogpu') === '1'; } catch (_) {}
     if (!noGpu) { try { this.lm = await withTimeout(make('GPU'), 2500, 'GPU timeout'); this.delegate = 'GPU'; } catch (_) { try { localStorage.setItem('rb-nogpu', '1'); } catch (e) {} } }
     if (!this.lm) { this.lm = await make('CPU'); this.delegate = 'CPU'; this.segEvery = Math.max(this.segEvery, 4); }
-    if (segBuf) {
+    // face recognition is all that's needed to start; the person outline joins a moment later in the background
+    this.progress = 1; this.ready = true; onStatus(''); this.timings.ready = Math.round(performance.now() - this._t0);
+    if (segBuf) (async () => {
       try {
         const mkSeg = (delegate) => vision.ImageSegmenter.createFromOptions(fileset, {
           baseOptions: { modelAssetBuffer: new Uint8Array(segBuf), delegate }, runningMode: 'VIDEO', outputCategoryMask: false, outputConfidenceMasks: true,
         });
         this.seg = this.delegate === 'GPU' ? await withTimeout(mkSeg('GPU'), 2500, 'GPU timeout').catch(() => mkSeg('CPU')) : await mkSeg('CPU');
       } catch (e) { this.seg = null; console.warn('[LaughDetector] segmentation unavailable', e); }
-    }
-    this.progress = 1; this.ready = true; onStatus('');
+          this.timings.seg = Math.round(performance.now() - this._t0);
+    })();
+
   }
 
   /** @returns {{face:boolean, smile:number, jaw:number, squint:number, mouth:{x:number,y:number}, box:{x:number,y:number,w:number,h:number}}|null} */

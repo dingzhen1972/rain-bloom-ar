@@ -5,6 +5,17 @@ const SANS = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC"
 const MONO = 'ui-monospace,"SF Mono","DejaVu Sans Mono",Menlo,monospace';
 const rgb = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
+/** Line icons, one stroke weight and colour: 'smile' (closed smile) and 'laugh' (open, filled mouth). */
+function face(ctx, x, y, r, kind, S) {
+  ctx.save(); ctx.strokeStyle = ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.lineWidth = 4.5 * S; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.stroke();
+  const ex = r * 0.36, ey = y - r * 0.22, er = r * 0.085;
+  ctx.beginPath(); ctx.arc(x - ex, ey, er, 0, 6.283); ctx.arc(x + ex, ey, er, 0, 6.283); ctx.fill();
+  if (kind === 'laugh') { ctx.beginPath(); ctx.moveTo(x - r * 0.5, y + r * 0.1); ctx.lineTo(x + r * 0.5, y + r * 0.1); ctx.arc(x, y + r * 0.1, r * 0.5, 0, Math.PI); ctx.closePath(); ctx.fill(); }
+  else { ctx.beginPath(); ctx.arc(x, y + r * 0.02, r * 0.48, 0.18 * Math.PI, 0.82 * Math.PI); ctx.stroke(); }
+  ctx.restore();
+}
+
 export function drawHUD(ctx, W, H, o) {
   const S = Math.min(W, H) / 1080, t = o.time || 0;
   const hot = o.state === 'laugh' || o.state === 'bloom';
@@ -14,9 +25,11 @@ export function drawHUD(ctx, W, H, o) {
   if (o.hint && o.hintAlpha > 0.01) {
     ctx.globalAlpha = o.hintAlpha;
     // plain text, no box (Apple-like): light weight, wide tracking, soft shadow for legibility on any background
-    ctx.font = `500 ${32 * S}px ${SANS}`; if ('letterSpacing' in ctx) ctx.letterSpacing = `${3 * S}px`;
     ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 14 * S;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(o.hint, W / 2, 170 * S);
+    let ty = 170 * S;
+    if (o.icon) { face(ctx, W / 2, 150 * S, 44 * S, o.icon, S); ty = 236 * S; }   // icon above, small caption below
+    ctx.font = `500 ${(o.icon ? 26 : 30) * S}px ${SANS}`; if ('letterSpacing' in ctx) ctx.letterSpacing = `${3 * S}px`;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillText(o.hint, W / 2, ty);
     ctx.shadowBlur = 0; if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
     ctx.globalAlpha = 1;
   }
