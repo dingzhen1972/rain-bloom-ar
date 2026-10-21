@@ -428,6 +428,7 @@ export class ChainRainEffect {
       else { ctx.strokeStyle = rgba(T.splash.color, T.splash.alpha * f); ctx.lineWidth = p.r * 0.8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(p.x - p.vx * 0.018, p.y - p.vy * 0.018); ctx.lineTo(p.x, p.y); ctx.stroke(); }
     }
     for (const gl of this.glows) {
+      if (!gl.a) continue;
       const k = gl.age / gl.life, al = gl.a * (k < 0.15 ? k / 0.15 : Math.pow(1 - (k - 0.15) / 0.85, 1.6));
       ctx.globalAlpha = al; ctx.drawImage(this._sprite('glow', gl.col || T.mouthGlow.color), gl.x - gl.R, gl.y - gl.R, gl.R * 2, gl.R * 2);
     }
@@ -444,7 +445,12 @@ export class ChainRainEffect {
   /** Behind-the-person test with a soft edge: within a band above the outline a point disappears with a
    *  probability that grows toward the outline (h = stable 0..1 hash per point), so far sparks dissolve
    *  into the person instead of being cut along a hard line (which reads as a cut-out mask). */
-  _behind(x, y, h) { const t = this._top(x); return t !== Infinity && y > t + 2 * this.S - this.theme.fireworks.behindFade * this.H * h; }
+  _behind(x, y, h) {
+    const t = this._top(x); if (t === Infinity) return false;
+    // hair is not a clean curve: a wavy, slowly drifting edge plus a per-point dissolve (h^0.7 pushes more points deep)
+    const wob = (Math.sin(x * 0.045 / this.S + this.time * 1.3) + Math.sin(x * 0.11 / this.S - this.time * 0.7) * 0.6) * 9 * this.S;
+    return y > t + wob - this.theme.fireworks.behindFade * this.H * Math.pow(h, 0.7);
+  }
 
   _drawRocket(ctx, r) {
     const S = this.S, tr = r.tr; if (tr.length < 4) return;

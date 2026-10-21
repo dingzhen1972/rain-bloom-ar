@@ -29,7 +29,7 @@ export const THEME = {
   },
   // each raindrop that ignites opens into a tiny golden floret (pre-rendered rays, no extra particles)
   flare: { core: [255, 245, 220], mid: [255, 190, 110], life: 0.42, size: 4.2, rays: 6 },
-  mouthGlow: { color: [255, 190, 120], pulseAlpha: 0.22, laughAlpha: 0.55 },
+  mouthGlow: { color: [255, 190, 120], pulseAlpha: 0, laughAlpha: 0 },
   fireworks: {
     colors: {
       gold: [255, 190, 90], amber: [255, 140, 60], white: [255, 244, 225], silver: [205, 220, 255],
@@ -47,7 +47,7 @@ export const THEME = {
     // part of a big shell opens on the near side of the person: those sparks rain onto the head and shoulders and bounce
     frontShare: { grand: 0.5, willow: 0.5, peony: 0.4, chrys: 0.3 },
     glowAlpha: 0.55,         // soft bloom around sparks (quarter-res buffer, mid/high tiers)
-    behindFade: 0.07,        // far sparks dissolve over this height (fraction of frame) above the person's outline
+    behindFade: 0.14,        // far sparks dissolve over this height (fraction of frame) above the person's outline
     highTierDensity: { grand: 1.9, willow: 1.5, chrys: 1.3, peony: 1.3 },
     bloomGlow: [255, 196, 110], bloomGlowAlpha: 0.32,   // warm light that lingers where the grand shell opened
     smoke: [150, 150, 175], smokeAlpha: 0.1,
