@@ -129,9 +129,9 @@ export class ChainRainEffect {
   _spawn(anywhere = false) {
     const R = this.theme.rain, u = this.rand(), zp = this.zp, span = this._span();
     let z, x, band = false;
-    if (u < 0.04) z = this._r(0.22, Math.max(0.26, zp - 0.15));
-    else if (u < 0.04 + R.onPerson && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
-    else if (u < 0.66) z = this._r(zp + 0.3, 4.5);
+    if (u < R.near) z = this._r(0.22, Math.max(0.26, zp - 0.15));
+    else if (u < R.near + R.onPerson && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
+    else if (u < 0.7) z = this._r(zp + 0.3, 4.5);
     else z = this._r(4.5, Z_FAR);
     if (x === undefined) x = this._r(-0.05, 1.05) * this.W;
     const v = (this.f * FALL / z) * this._r(0.9, 1.1);
@@ -229,7 +229,7 @@ export class ChainRainEffect {
       this.stars.push({ x, y, vx: dx * s, vy: dy * s, drag, g: (heavy ? 160 : grand ? 120 : 100) * S, age: 0,
         life: kind === 'willow' ? this._r(3.2, 4.0) : heavy ? this._r(2.8, 3.8) : grand ? this._r(2.6, 3.3) : kind === 'peony' ? this._r(1.5, 2.1) : this._r(1.8, 2.5),
         col: kind === 'chrys' && this.rand() < 0.3 ? F.colors.white : col, fade: heavy || grand ? fade : null, tr: [], tl, w: (kind === 'peony' ? 3.0 : grand ? 2.8 : F.headSize) * S,
-        glit: heavy || grand || kind === 'chrys', strobe: kind === 'chrys' && this.rand() < 0.4, k: this._r(0, 6.28) });
+        dz: this._r(0.6, 1.45), glit: heavy || grand || kind === 'chrys', strobe: kind === 'chrys' && this.rand() < 0.4, k: this._r(0, 6.28) });
     }
     if (share) this._frontSparks(x, y, R, Math.round(n * share), col);
     if (grand && F.bloomGlow) this.glows.push({ x, y, age: 0, life: 1.8, R: 0.42 * this.W, a: F.bloomGlowAlpha, col: F.bloomGlow });
@@ -421,6 +421,7 @@ export class ChainRainEffect {
     for (const r of this.rockets) if (r.front) this._drawRocket(ctx, r);
     this._drawEmbers(ctx, true); this._drawFlares(ctx, true);
     this._drawDebris(ctx);
+    this._drawGlow(ctx);
     for (const p of this.splash) {
       const f = 1 - p.age / p.life;
       if (p.glint) { ctx.globalAlpha = (p.warm ? 0.9 : T.splash.glintAlpha) * f; const s = p.r * 6; ctx.drawImage(this._sprite('glow', p.warm ? T.fireworks.colors.gold : T.splash.color), p.x - s / 2, p.y - s / 2, s, s); ctx.globalAlpha = 1; }
@@ -521,13 +522,14 @@ export class ChainRainEffect {
           L.fillStyle = rgba(col, Math.min(1, al * (half ? 0.45 : 0.95))); L.beginPath();
           for (const p of arr) {
             const t = p.tr, n = t.length, mid = (n >> 2) << 1; if (n < 6) continue;
-            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { if (!this._behind(t[j], t[j + 1], frac(p.k + j * 0.618))) L.rect(t[j] - r, t[j + 1] - r, r * 2, r * 2); }
+            for (let j = half ? 0 : mid; j < (half ? mid : n - 2); j += step) { const hb = frac(p.k + j * 0.618); if (frac(hb * 5.3 + this.time * 2.2) < 0.22) continue;   // beads twinkle
+              if (!this._behind(t[j], t[j + 1], hb)) { const rb = r * (p.dz || 1); L.rect(t[j] - rb, t[j + 1] - rb, rb * 2, rb * 2); } }
           }
           L.fill();
         }
       }
       L.fillStyle = rgba(col, Math.min(1, al * 1.3)); L.beginPath();
-      for (const p of arr) { if (this._behind(p.x, p.y, frac(p.k * 7.31))) continue; const rr = p.w * (p.age < 0.12 ? 1.8 : 1); L.rect(p.x - rr * 0.9, p.y - rr * 0.9, rr * 1.8, rr * 1.8); }
+      for (const p of arr) { if (this._behind(p.x, p.y, frac(p.k * 7.31))) continue; const rr = p.w * (p.dz || 1) * (p.age < 0.12 ? 1.3 : 1); L.rect(p.x - rr * 0.9, p.y - rr * 0.9, rr * 1.8, rr * 1.8); }
       L.fill();
     }
     if (F.headGlow && this.quality > 0.6) {   // soft bloom around young star heads only
@@ -543,6 +545,27 @@ export class ChainRainEffect {
       L.fillStyle = 'rgba(255,250,235,0.9)';
       for (const p of this.stars) if (p.glit && p.tr.length > 6 && this.rand() < 0.3) { const j = 2 * Math.floor(this.rand() * (p.tr.length / 2)); if (!this._behind(p.tr[j], p.tr[j + 1], frac(p.k + j * 0.618))) L.fillRect(p.tr[j] - S, p.tr[j + 1] - S, 2 * S, 2 * S); }
     }
+  }
+
+  /** Cheap bloom: star heads and front sparks drawn as big soft dots into a quarter-resolution buffer,
+   *  then stretched over the frame additively; the upscale itself blurs it into a halo. Mid/high tiers only. */
+  _drawGlow(ctx) {
+    const F = this.theme.fireworks; if (!F.glowAlpha || this.quality < 0.6 || (!this.stars.length && !this.debris.length)) return;
+    const k = 0.125, w = Math.ceil(this.W * k), h = Math.ceil(this.H * k);
+    if (!this._gl || this._gl.width !== w || this._gl.height !== h) { this._gl = document.createElement('canvas'); this._gl.width = w; this._gl.height = h; this._glx = this._gl.getContext('2d'); }
+    const g = this._glx; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h); g.globalCompositeOperation = 'lighter';
+    for (const [col, list] of [[F.colors.gold, 0], [F.colors.white, 1]]) {
+      g.fillStyle = rgba(col, 0.55); g.beginPath();
+      for (const p of this.stars) {
+        if ((p.col === F.colors.white || p.col === F.pistil) !== !!list || this._behind(p.x, p.y, frac(p.k * 7.31))) continue;
+        const f = 1 - p.age / p.life; if (f < 0.15 || p.age < 0.2) continue; const r = Math.max(1, p.w * (p.dz || 1) * 3.2 * k * f);   // fresh bursts skip the glow: no white disc
+        g.rect(p.x * k - r, p.y * k - r, r * 2, r * 2);
+      }
+      if (!list) for (const p of this.debris) { const r = Math.max(1, p.r * 3.2 * k); g.rect(p.x * k - r, p.y * k - r, r * 2, r * 2); }
+      g.fill();
+    }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = F.glowAlpha; ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this._gl, 0, 0, this.W, this.H); ctx.restore();
   }
 
   _drawDebris(c) {   // sparks in front of the person: streaks batched by brightness, then a glow per spark
