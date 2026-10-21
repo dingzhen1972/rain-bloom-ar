@@ -79,7 +79,7 @@ export const THEME = {
     tint: [165, 150, 112], skyTint: [205, 198, 165], vignette: [3, 5, 14], vignetteAlpha: [0.32, 0.33],
   },
   hud: {
-    hintSmile: '微笑一下，开始下雨', hintLaugh: '笑出声，让雨变成烟花',
+    hintSmile: '微笑', hintLaugh: '笑出声',
     bar: [235, 244, 255], barHot: [255, 205, 120], words: { still: '静', smile: '雨', laugh: '哈', bloom: '花' },
   },
 };

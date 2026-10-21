@@ -5,7 +5,7 @@
   --gold: #ffd27a;
   --line: rgba(238, 245, 255, 0.22);
   --glass: rgba(10, 16, 32, 0.55);
-  --sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
   color-scheme: dark;
 }
@@ -23,7 +23,16 @@ body { display: grid; place-items: center; overflow: hidden; }
   background: linear-gradient(180deg, rgba(5,7,15,0.15) 0%, rgba(5,7,15,0.55) 45%, rgba(5,7,15,0.94) 100%);
 }
 .eyebrow { margin: 0; font: 500 12px/1 var(--mono); letter-spacing: 0.18em; color: var(--gold); }
-h1 { margin: 0; font-weight: 300; font-size: clamp(44px, 13vw, 72px); letter-spacing: 0.06em; text-wrap: balance; }
+h1 { margin: 0; font-weight: 600; font-size: clamp(34px, 9.5vw, 48px); letter-spacing: 0.04em; line-height: 1.1; }
+/* start screen: Apple-like — one title in the middle, one button at the bottom, nothing else */
+#start { justify-content: space-between; align-items: center; text-align: center; padding-top: 38dvh;
+  background: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.6) 100%); }
+#start .actions { width: 100%; max-width: 320px; justify-content: center; }
+#btnCamera { width: 100%; padding: 17px 0; font: 600 17px/1 var(--sans); letter-spacing: 0.02em; background: #f5f5f7; color: #1d1d1f; border: 0;
+  position: relative; overflow: hidden; transition: opacity .3s; }
+#btnCamera:disabled { background: rgba(245,245,247,0.14); color: rgba(245,245,247,0.75); cursor: default; }
+#btnCamera i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(245,245,247,0.16); transition: width .25s linear; }
+#btnCamera b { position: relative; font-weight: inherit; }
 h2 { margin: 0; font-weight: 400; font-size: 28px; }
 .lede { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
 .fine { margin: 4px 0 0; color: rgba(238,245,255,0.42); font-size: 12px; line-height: 1.6; }

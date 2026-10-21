@@ -113,7 +113,7 @@ function maybeDetect(now) {
   lastVideoTime = vt; lastDetect = now;
   const t0 = performance.now(), s = detector.detect(src, now), ms = performance.now() - t0;
   stats.detectMs += (ms - stats.detectMs) * 0.1; stats.detections++;
-  const base = 1000 / tier.detectHz;   // the model must never eat the frame budget
+  const base = 1000 / (detector.delegate === 'CPU' ? Math.min(tier.detectHz, 12) : tier.detectHz);   // the model must never eat the frame budget (CPU inference: 12 Hz is plenty for expressions)
   detectEvery = clamp(stats.detectMs > base * 0.6 ? detectEvery * 1.1 : detectEvery * 0.98, base, 1000 / 8);
   return s;
 }
@@ -180,7 +180,7 @@ function loop(now) {
 
 function drawUI(now, dt) {
   const T = THEME.hud;
-  const hint = mode === 'demo' ? '演示模式 · 点屏幕也能触发' : !detector.ready ? (detector.error ? '识别没加载出来 · 点屏幕也能触发' : `正在加载识别 ${Math.round(detector.progress * 100)}%`) : noFace > 1.5 ? '请把脸放进画面里' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
+  const hint = mode === 'demo' ? '轻点屏幕' : !detector.ready ? (detector.error ? '识别不可用 · 轻点屏幕' : `载入中 ${Math.round(detector.progress * 100)}%`) : noFace > 1.5 ? '把脸放进画面' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
   idleTime = fx.busy ? 0 : idleTime + dt; if (fx.busy) bloomedOnce = true;
   const want = !detector.ready || mode === 'demo' || noFace > 1.5 ? 1 : fx.busy ? 0 : idleTime > (bloomedOnce ? 10 : 0.5) ? 1 : 0;
   hintA += (want - hintA) * Math.min(1, dt * 3);
@@ -319,8 +319,15 @@ function backToStart() {
   show('bar', false); show('done', false); show('progress', false); show('start', true); toast('');
   mode = null; startIdle();
 }
-// models start downloading as soon as the page opens, so they are usually ready by the time the camera is
+// models load as soon as the page opens; Start stays disabled (showing progress) until they are ready,
+// so nobody lands in the camera with recognition still missing. On failure Start unlocks with tap-to-trigger.
 function loadModels() { if (!detector.ready && !detector.error) detector.init(); }
+function startButton() {
+  const b = $('btnCamera'), ok = detector.ready || !!detector.error;
+  b.disabled = !ok; b.lastElementChild.textContent = ok ? '开始' : `载入中 ${Math.round(detector.progress * 100)}%`;
+  b.firstElementChild.style.width = ok ? '0' : `${(detector.progress * 100).toFixed(1)}%`;
+  if (!ok) setTimeout(startButton, 200);
+}
 
 // ---- wire up ----
 $('btnCamera').onclick = startCamera;
@@ -347,5 +354,5 @@ function idle(now) {
 }
 function startIdle() { lastT = 0; fx.setFace(null); fx.setSilhouette(null); silOut = null; requestAnimationFrame(idle); }
 startIdle();
-if (qs.get('mode') !== 'demo') loadModels();
+if (qs.get('mode') !== 'demo') { loadModels(); startButton(); }
 if (qs.get('mode') === 'demo') { sessionId++; begin('demo'); }

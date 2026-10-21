@@ -89,14 +89,17 @@ export class LaughDetector {
       runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
       minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4, minTrackingConfidence: 0.4,
     });
-    // some in-app / vendor browsers hang forever creating the GPU delegate: give it 8 s, then use the CPU
-    try { this.lm = await withTimeout(make('GPU'), 8000, 'GPU timeout'); } catch (_) { this.lm = await make('CPU'); }
+    // Some phones (seen on Honor) hang forever creating the GPU delegate. Try it for 2.5 s; if it hangs,
+    // remember that on this device and go straight to the CPU next time.
+    let noGpu = false; try { noGpu = localStorage.getItem('rb-nogpu') === '1'; } catch (_) {}
+    if (!noGpu) { try { this.lm = await withTimeout(make('GPU'), 2500, 'GPU timeout'); this.delegate = 'GPU'; } catch (_) { try { localStorage.setItem('rb-nogpu', '1'); } catch (e) {} } }
+    if (!this.lm) { this.lm = await make('CPU'); this.delegate = 'CPU'; this.segEvery = Math.max(this.segEvery, 4); }
     if (segBuf) {
       try {
         const mkSeg = (delegate) => vision.ImageSegmenter.createFromOptions(fileset, {
           baseOptions: { modelAssetBuffer: new Uint8Array(segBuf), delegate }, runningMode: 'VIDEO', outputCategoryMask: false, outputConfidenceMasks: true,
         });
-        try { this.seg = await withTimeout(mkSeg('GPU'), 6000, 'GPU timeout'); } catch (_) { this.seg = await mkSeg('CPU'); }
+        this.seg = this.delegate === 'GPU' ? await withTimeout(mkSeg('GPU'), 2500, 'GPU timeout').catch(() => mkSeg('CPU')) : await mkSeg('CPU');
       } catch (e) { this.seg = null; console.warn('[LaughDetector] segmentation unavailable', e); }
     }
     this.progress = 1; this.ready = true; onStatus('');

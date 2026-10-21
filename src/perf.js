@@ -29,6 +29,8 @@ export function detectTier(override) {
   if (weakGpu || mem <= 2 || cores <= 2) t = 'low';
   else if (mobile) t = mem >= 6 && cores >= 8 ? 'mid' : (cores <= 4 ? 'low' : 'mid');
   else t = cores >= 6 ? 'high' : 'mid';
+  // phones: even good ones draw at 540 px (the screen is small, the GPU is shared with the camera and the model)
+  if (mobile && t === 'mid') return { ...TIERS.mid, res: 540, detectHz: 20, reason: `phone, cores ${cores}, mem ${mem}GB, gpu ${gpu}` };
   return { ...TIERS[t], reason: `cores ${cores}, mem ${mem}GB, ${mobile ? 'mobile' : 'desktop'}, gpu ${gpu}` };
 }
 
