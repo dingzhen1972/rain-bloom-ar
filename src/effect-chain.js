@@ -129,7 +129,7 @@ export class ChainRainEffect {
   _spawn(anywhere = false) {
     const R = this.theme.rain, u = this.rand(), zp = this.zp, span = this._span();
     let z, x, band = false;
-    if (u < R.near) z = this._r(0.22, Math.max(0.26, zp - 0.15));
+    if (u < R.near) z = u < R.near * 0.25 ? this._r(0.22, 0.34) : this._r(0.34, Math.max(0.36, zp - 0.1));   // between the lens and the person: drawn over them
     else if (u < R.near + R.onPerson && span) { z = this._r(zp - 0.08, zp + 0.18); band = true; x = this._r(span[0], span[1]); }
     else if (u < 0.7) z = this._r(zp + 0.3, 4.5);
     else z = this._r(4.5, Z_FAR);
@@ -138,9 +138,9 @@ export class ChainRainEffect {
     const len = Math.min(v * SHUTTER, this.H * 0.32);   // a lens-hugging drop reads as a soft streak, not a scratch across the frame
     const w = clamp(this.f * R.dropWidth / z, 0.55 * this.S, 11 * this.S);
     const near = z < zp - 0.1;
-    const a = near ? this._r(R.alphaNear[0], R.alphaNear[1]) : band ? R.alphaOnPerson : lerp(R.alphaFar[0], R.alphaFar[1], Math.pow(clamp(z / Z_FAR), 0.7));
+    const a = near ? (z < 0.34 ? this._r(R.alphaNear[0], R.alphaNear[1]) : this._r(R.alphaFront[0], R.alphaFront[1])) : band ? R.alphaOnPerson : lerp(R.alphaFar[0], R.alphaFar[1], Math.pow(clamp(z / Z_FAR), 0.7));
     const y = anywhere ? this._r(-len, this.H) : -this._r(0, this.H * 0.25) - len * 0.2;
-    this.drops.push({ x, y, z, v, len, w, a, band, near, glint: -9, ig: Infinity });
+    this.drops.push({ x, y, z, v, len, w, a, band, near, glint: -9, ig: Infinity, h: this.rand() });
   }
 
   pulse(strength = 1) {
@@ -471,7 +471,7 @@ export class ChainRainEffect {
       const len = Math.max(d.w * 2, d.len * (1 - slow * 0.85));
       const gl = this.time - d.glint, glint = gl > 0 && gl < 0.22 ? 1 - gl / 0.22 : 0;
       if (front) { c.globalAlpha = d.a; c.drawImage(streak, d.x - d.w * 1.2, d.y - len, d.w * 2.4, len); continue; }
-      const bottom = Math.min(d.y, this._top(d.x)), top = d.y - len;   // the part behind the person is not drawn
+      const tp = this._top(d.x), bottom = Math.min(d.y, d.band ? tp : tp - this.theme.fireworks.behindFade * this.H * d.h * 0.6), top = d.y - len;   // far rain fades out at varied heights above the person, no hard line   // the part behind the person is not drawn
       if (bottom <= top) continue;
       if (d.z < 3 && !d.band) halo.push(d.x, top, bottom);
       if (!glint && d.w < 1.4 * S) { const k = Math.round(d.a * 12); let arr = thin.get(k); if (!arr) thin.set(k, (arr = [])); arr.push(d.x, top, bottom); continue; }

@@ -12,8 +12,9 @@ export const THEME = {
     color: [232, 241, 255],
     alphaNear: [0.14, 0.24],   // drops right in front of the lens (out of focus)
     alphaOnPerson: 0.7,         // drops that land on the head / shoulders
-    near: 0.09,                 // share of drops right in front of the lens (soft, out of focus)
-    onPerson: 0.32,             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
+    near: 0.32,                 // share of drops between the lens and the person (drawn over them; the closest quarter soft and faint)
+    alphaFront: [0.42, 0.62],   // drops in front of the person but not hugging the lens
+    onPerson: 0.24,             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
     alphaFar: [0.86, 0.36],     // from 0.5 m to the far distance (fog)
     dropWidth: 0.0019,          // physical drop diameter in metres (drives on-screen thickness)
     darkHalo: 0.16,             // soft dark edge that keeps rain readable on bright walls
@@ -42,7 +43,7 @@ export const THEME = {
     // extra stars on strong devices only: full at quality 1 (high tier), none at ≤ 0.75 (mid / low tiers).
     // The runtime governor lowers quality when frames run long, so this backs off by itself on a hot phone.
     // part of a big shell opens on the near side of the person: those sparks rain onto the head and shoulders and bounce
-    frontShare: { grand: 0.4, willow: 0.4, peony: 0.25 },
+    frontShare: { grand: 0.5, willow: 0.5, peony: 0.4, chrys: 0.3 },
     glowAlpha: 0.55,         // soft bloom around sparks (quarter-res buffer, mid/high tiers)
     behindFade: 0.07,        // far sparks dissolve over this height (fraction of frame) above the person's outline
     highTierDensity: { grand: 1.9, willow: 1.5, chrys: 1.3, peony: 1.3 },
