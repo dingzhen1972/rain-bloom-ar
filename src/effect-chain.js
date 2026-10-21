@@ -260,7 +260,7 @@ export class ChainRainEffect {
       while (this.queue.length && this.queue[0].t - (this.queue[0].front ? 0.6 : 0.8) <= t) this._launch(this.queue.shift());
       if (t > SEQUENCE_LENGTH && this.rockets.length === 0) { this.state = 'rain'; this.queue = []; this.onEvent('done', {}); }
     } else this.ts = 1;
-    this.rainLevel += (want - this.rainLevel) * Math.min(1, dt * (want > this.rainLevel ? 1.6 : 0.5));
+    this.rainLevel += (want - this.rainLevel) * Math.min(1, dt * (want > this.rainLevel ? 1.6 : this.state === 'bloom' ? 4 : 0.5));   // the sky clears quickly once the fireworks start
     this.gradeV += (gradeT - this.gradeV) * Math.min(1, dt * 4);
 
     // rain
@@ -464,19 +464,20 @@ export class ChainRainEffect {
 
   _drawRain(c, front) {
     const R = this.theme.rain, S = this.S, slow = 1 - this.ts;
+    const dim = this.state === 'bloom' ? 1 - (this.theme.rain.bloomDim || 0) * smooth(inv(0.2, 0.8, this.tau)) * (1 - smooth(inv(5.4, 7.2, this.tau))) : 1;   // rain steps back while fireworks play
     const thin = new Map(), halo = [], wd = R.wind || 0, M = c.getTransform();
     const streak = this._sprite('streak', R.color), glintS = this._sprite('streak', R.glint);
     for (const d of this.drops) {
       if (d.near !== front) continue;
       const len = Math.max(d.w * 2, d.len * (1 - slow * 0.85));
       const gl = this.time - d.glint, glint = gl > 0 && gl < 0.22 ? 1 - gl / 0.22 : 0;
-      if (front) { c.globalAlpha = d.a; c.setTransform(M); c.transform(1, 0, wd, 1, -wd * d.y, 0); c.drawImage(streak, d.x - d.w * 1.2, d.y - len, d.w * 2.4, len); continue; }
+      if (front) { c.globalAlpha = d.a * dim; c.setTransform(M); c.transform(1, 0, wd, 1, -wd * d.y, 0); c.drawImage(streak, d.x - d.w * 1.2, d.y - len, d.w * 2.4, len); continue; }
       const tp = this._top(d.x), bottom = Math.min(d.y, d.band ? tp : tp - this.theme.fireworks.behindFade * this.H * d.h * 0.6), top = d.y - len;   // far rain fades out at varied heights above the person, no hard line   // the part behind the person is not drawn
       if (bottom <= top) continue;
       const xt = d.x - wd * (d.y - top), xb = d.x - wd * (d.y - bottom);
       if (d.z < 3 && !d.band) halo.push(xt, top, xb, bottom);
-      if (!glint && d.w < 1.4 * S) { const k = Math.round(d.a * 12); let arr = thin.get(k); if (!arr) thin.set(k, (arr = [])); arr.push(xt, top, xb, bottom); continue; }
-      c.globalAlpha = Math.min(1, d.a + glint * 0.5);
+      if (!glint && d.w < 1.4 * S) { const k = Math.round(d.a * dim * 12); let arr = thin.get(k); if (!arr) thin.set(k, (arr = [])); arr.push(xt, top, xb, bottom); continue; }
+      c.globalAlpha = Math.min(1, d.a + glint * 0.5) * dim;
       const w = d.w * (1 + glint * 0.8) * 1.6, sh = (bottom - top) / len;
       c.setTransform(M); c.transform(1, 0, wd, 1, -wd * bottom, 0); c.drawImage(glint ? glintS : streak, 0, 0, 8, 128 * sh, xb - w / 2, top, w, bottom - top);
     }

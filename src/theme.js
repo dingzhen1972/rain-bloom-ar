@@ -15,6 +15,7 @@ export const THEME = {
     near: 0.16,                 // share of drops between the lens and the person (drawn over them; the closest quarter soft and faint)
     alphaFront: [0.2, 0.34],    // drops in front of the person but not hugging the lens
     onPerson: 0.24,
+    bloomDim: 0.75,             // how much the leftover rain fades while fireworks play (0 = not at all)
     wind: -0.07,                // slight slant: horizontal drift per unit of fall (negative = leans left)             // share of drops falling at the person's depth (they hit the head and shoulders and splash)
     alphaFar: [0.86, 0.36],     // from 0.5 m to the far distance (fog)
     dropWidth: 0.0019,          // physical drop diameter in metres (drives on-screen thickness)
