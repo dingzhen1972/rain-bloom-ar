@@ -24,57 +24,82 @@ const MODEL_CANDIDATES = [
 ];
 
 const abs = (u) => (u.startsWith('.') ? new URL(u, document.baseURI).href : u);
+const SIZES = { wasm: 9.4e6, model: 3.76e6, seg: 0.25e6 };   // used when a server sends no Content-Length
 
-async function firstReachable(urls, { probe = true } = {}) {
+/** Ask every mirror for its first 256 KB at once and keep whichever answers first.
+ *  Which host is fast depends on where the viewer is (GitHub Pages is often slow in mainland China, jsDelivr is not). */
+async function fastest(urls, ms = 6000) {
   urls = urls.map(abs);
-  for (const u of urls) {
-    if (!probe) return u;
-    try { const r = await fetch(u, { method: 'HEAD', cache: 'no-store' }); if (r.ok) return u; } catch (_) { /* try next */ }
-  }
-  return urls[urls.length - 1];
+  const ctl = urls.map(() => new AbortController());
+  const tries = urls.map((u, i) => fetch(u, { headers: { Range: 'bytes=0-262143' }, signal: ctl[i].signal, cache: 'no-store' })
+    .then(async (r) => { if (!r.ok) throw new Error(String(r.status)); await r.arrayBuffer(); return u; }));
+  const timer = new Promise((res) => setTimeout(() => res(null), ms));
+  let win = null;
+  try { win = await Promise.race([Promise.any(tries), timer]); } catch (_) { win = null; }
+  ctl.forEach((c, i) => { if (urls[i] !== win) c.abort(); });
+  return win || urls[0];
 }
+/** Download with byte progress. force-cache so MediaPipe's own request for the same URL is served from cache. */
+async function download(url, guess, onBytes) {
+  const r = await fetch(url, { cache: 'force-cache' }); if (!r.ok) throw new Error(`${r.status} ${url}`);
+  const total = Number(r.headers.get('content-length')) || guess;
+  if (!r.body || !r.body.getReader) { const b = await r.arrayBuffer(); onBytes(b.byteLength, total); return b; }
+  const rd = r.body.getReader(), parts = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onBytes(got, total); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out.buffer;
+}
+const simdOK = (() => { try { return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11])); } catch (_) { return false; } })();
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, j) => setTimeout(() => j(new Error(msg)), ms))]);
 
 export class LaughDetector {
-  constructor(opts = {}) { this.ready = false; this.loading = false; this.lastTs = -1; this.lm = null; this.seg = null; this.error = null; this.segEvery = opts.segEvery || 2; }
+  constructor(opts = {}) { this.ready = false; this.loading = false; this.lastTs = -1; this.lm = null; this.seg = null; this.error = null; this.segEvery = opts.segEvery || 2; this.progress = 0; this._p = {}; }
 
-  async init(onStatus = () => {}) {
-    this.loading = true;
-    const timeout = new Promise((_, j) => setTimeout(() => j(new Error('模型加载超时')), 30000));
-    try { await Promise.race([this._load(onStatus), timeout]); }
-    catch (e) { this.error = e; this.ready = false; onStatus('识别没加载出来，点屏幕也能触发'); console.warn('[LaughDetector]', e); }
-    this.loading = false;
-    return this.ready;
+  /** Safe to call early (e.g. on page load) and more than once: later calls share the same load. */
+  init(onStatus = () => {}) {
+    if (this._init) return this._init;
+    this.loading = true; this._last = performance.now();
+    // fail only when nothing has arrived for a long time (a slow but moving download is fine)
+    const stall = new Promise((_, j) => { const t = setInterval(() => { if (this.ready || this.error) clearInterval(t); else if (performance.now() - this._last > 25000) { clearInterval(t); j(new Error('模型下载停滞')); } }, 1000); });
+    this._init = Promise.race([this._load(onStatus), stall]).then(() => true, (e) => { this.error = e; this.ready = false; onStatus(''); console.warn('[LaughDetector]', e); return false; })
+      .finally(() => { this.loading = false; });
+    return this._init;
   }
+  _bytes(key, got, total) { this._p[key] = [got, total]; this._last = performance.now(); let g = 0, t = 0; for (const k of ['wasm', 'model', 'seg']) { const v = this._p[k] || [0, SIZES[k]]; g += v[0]; t += v[1]; } this.progress = Math.min(0.99, g / t); }
 
   async _load(onStatus) {
-    {
-      onStatus('加载识别模块…');
-      let vision = null, lastErr = null;
-      for (const url of BUNDLE_CANDIDATES) {
-        try { vision = await import(/* @vite-ignore */ abs(url)); break; } catch (e) { lastErr = e; }
-      }
-      if (!vision) throw lastErr || new Error('无法加载 MediaPipe');
-      const wasm = await firstReachable(WASM_CANDIDATES.map((w) => w + '/vision_wasm_internal.js')).then((u) => u.replace(/\/vision_wasm_internal\.js$/, ''));
-      const fileset = await vision.FilesetResolver.forVisionTasks(wasm);
-      onStatus('加载人脸模型…');
-      const model = await firstReachable(MODEL_CANDIDATES);
-      const make = (delegate) => vision.FaceLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: model, delegate },
-        runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
-        minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4, minTrackingConfidence: 0.4,
-      });
-      try { this.lm = await make('GPU'); } catch (_) { this.lm = await make('CPU'); }
-      // person segmentation: gives the head-and-shoulders outline the rain lands on (optional)
+    onStatus('加载识别模块…');
+    let vision = null, lastErr = null;
+    for (const url of BUNDLE_CANDIDATES) { try { vision = await import(/* @vite-ignore */ abs(url)); break; } catch (e) { lastErr = e; } }
+    if (!vision) throw lastErr || new Error('无法加载 MediaPipe');
+    this._last = performance.now();
+    const wasmFile = simdOK ? 'vision_wasm_internal.wasm' : 'vision_wasm_nosimd_internal.wasm';
+    const wasmBase = (await fastest(WASM_CANDIDATES.map((w) => `${w}/${wasmFile}`))).replace(/\/[^/]+$/, '');
+    const modelUrl = await fastest(MODEL_CANDIDATES), segUrl = abs(SEG_MODEL_CANDIDATES[0]);
+    // the three downloads run in parallel; progress is the sum of their bytes
+    const [, modelBuf, segBuf] = await Promise.all([
+      download(`${wasmBase}/${wasmFile}`, SIZES.wasm, (g, t) => this._bytes('wasm', g, t)),
+      download(modelUrl, SIZES.model, (g, t) => this._bytes('model', g, t)),
+      download(segUrl, SIZES.seg, (g, t) => this._bytes('seg', g, t)).catch(() => null),
+    ]);
+    const fileset = await vision.FilesetResolver.forVisionTasks(wasmBase);
+    onStatus('启动识别…');
+    const make = (delegate) => vision.FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetBuffer: new Uint8Array(modelBuf), delegate },
+      runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true,
+      minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4, minTrackingConfidence: 0.4,
+    });
+    // some in-app / vendor browsers hang forever creating the GPU delegate: give it 8 s, then use the CPU
+    try { this.lm = await withTimeout(make('GPU'), 8000, 'GPU timeout'); } catch (_) { this.lm = await make('CPU'); }
+    if (segBuf) {
       try {
-        onStatus('加载人像分割…');
-        const segModel = await firstReachable(SEG_MODEL_CANDIDATES);
         const mkSeg = (delegate) => vision.ImageSegmenter.createFromOptions(fileset, {
-          baseOptions: { modelAssetPath: segModel, delegate }, runningMode: 'VIDEO', outputCategoryMask: false, outputConfidenceMasks: true,
+          baseOptions: { modelAssetBuffer: new Uint8Array(segBuf), delegate }, runningMode: 'VIDEO', outputCategoryMask: false, outputConfidenceMasks: true,
         });
-        try { this.seg = await mkSeg('GPU'); } catch (_) { this.seg = await mkSeg('CPU'); }
+        try { this.seg = await withTimeout(mkSeg('GPU'), 6000, 'GPU timeout'); } catch (_) { this.seg = await mkSeg('CPU'); }
       } catch (e) { this.seg = null; console.warn('[LaughDetector] segmentation unavailable', e); }
-      this.ready = true; onStatus('');
     }
+    this.progress = 1; this.ready = true; onStatus('');
   }
 
   /** @returns {{face:boolean, smile:number, jaw:number, squint:number, mouth:{x:number,y:number}, box:{x:number,y:number,w:number,h:number}}|null} */

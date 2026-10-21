@@ -180,7 +180,7 @@ function loop(now) {
 
 function drawUI(now, dt) {
   const T = THEME.hud;
-  const hint = mode === 'demo' ? '演示模式 · 点屏幕也能触发' : !detector.ready ? (detector.error ? '识别没加载出来 · 点屏幕也能触发' : '正在加载识别…') : noFace > 1.5 ? '请把脸放进画面里' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
+  const hint = mode === 'demo' ? '演示模式 · 点屏幕也能触发' : !detector.ready ? (detector.error ? '识别没加载出来 · 点屏幕也能触发' : `正在加载识别 ${Math.round(detector.progress * 100)}%`) : noFace > 1.5 ? '请把脸放进画面里' : ctrl.state === 'smile' ? T.hintLaugh : T.hintSmile;
   idleTime = fx.busy ? 0 : idleTime + dt; if (fx.busy) bloomedOnce = true;
   const want = !detector.ready || mode === 'demo' || noFace > 1.5 ? 1 : fx.busy ? 0 : idleTime > (bloomedOnce ? 10 : 0.5) ? 1 : 0;
   hintA += (want - hintA) * Math.min(1, dt * 3);
@@ -203,14 +203,11 @@ function debugOverlay() {
 async function begin(newMode) {
   mode = newMode; videoEnded = false; finishing = false; crop.locked = false; noFace = 0; lastFaceAt = 0; silOut = null; lastSample = null;
   show('start', false); show('done', false); show('bar', true);
-  show('btnFlip', mode === 'camera'); show('progress', mode === 'video');
+  show('progress', mode === 'video');
   show('btnRec', !!(window.MediaRecorder && canvas.captureStream));
   $('btnRec').disabled = mode === 'video';
   try { await sfx.start(); } catch (_) { /* sound is optional */ }
-  setSoundUI();
-  if (mode !== 'demo' && !detector.ready && !detector.error && !detector.loading) {
-    detector.init((m) => m && toast(m, 0)).then((ok) => toast(ok ? '识别就绪：微笑一下试试' : '识别没加载出来：点屏幕也能触发', 3000));
-  }
+  if (mode !== 'demo') loadModels();
   if (!running) { running = true; lastT = 0; requestAnimationFrame(loop); }
 }
 
@@ -322,19 +319,16 @@ function backToStart() {
   show('bar', false); show('done', false); show('progress', false); show('start', true); toast('');
   mode = null; startIdle();
 }
-function setSoundUI() { $('btnSound').textContent = sfx.on ? '声音 开' : '声音 关'; $('btnSound').setAttribute('aria-pressed', String(sfx.on)); }
+// models start downloading as soon as the page opens, so they are usually ready by the time the camera is
+function loadModels() { if (!detector.ready && !detector.error) detector.init(); }
 
 // ---- wire up ----
 $('btnCamera').onclick = startCamera;
-$('btnDemo').onclick = () => { sessionId++; begin('demo'); };
 $('fileInput').onchange = (e) => { const f = e.target.files[0]; if (f) startVideo(f); e.target.value = ''; };
 $('btnBack').onclick = backToStart;
 $('btnAgain').onclick = () => { if (mode === 'video') backToStart(); else { show('done', false); show('bar', true); } };
-$('btnLaugh').onclick = () => window.__rainbloom.force();
 $('btnRec').onclick = () => (recorder && recorder.state === 'recording' ? requestStop() : startRecording());
-$('btnSound').onclick = async () => { if (sfx.on) sfx.stop(); else await sfx.start(); setSoundUI(); };
-$('btnFlip').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; crop.locked = false; startCamera(); };
-canvas.addEventListener('click', () => { if (mode) window.__rainbloom.force(); });
+canvas.addEventListener('click', () => { if (mode && (mode === 'demo' || detector.error)) window.__rainbloom.force(); });   // tap only as a fallback when recognition is unavailable
 addEventListener('keydown', (e) => { if (!mode) return; if (e.code === 'Space') { e.preventDefault(); window.__rainbloom.force(); } if (e.key === 'h') fx.pulse(1); });
 // background tab: rAF stops by itself; pause video; on return, no giant time step
 document.addEventListener('visibilitychange', () => {
@@ -353,4 +347,5 @@ function idle(now) {
 }
 function startIdle() { lastT = 0; fx.setFace(null); fx.setSilhouette(null); silOut = null; requestAnimationFrame(idle); }
 startIdle();
+if (qs.get('mode') !== 'demo') loadModels();
 if (qs.get('mode') === 'demo') { sessionId++; begin('demo'); }

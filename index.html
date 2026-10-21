@@ -15,15 +15,9 @@
     <canvas id="view" aria-label="AR 画面"></canvas>
 
     <section id="start" class="panel">
-      <p class="eyebrow">AR · LAUGH TO BLOOM</p>
       <h1>雨落成花</h1>
-      <p class="lede">微笑，雨就落下来，打在你的头顶和肩上。<br>笑出声，雨从嘴边被点燃，在你身后炸成烟花，火花落在你身上。</p>
-      <div class="actions">
-        <button id="btnCamera" class="primary">开启摄像头</button>
-        <label class="ghost file">用视频测试<input id="fileInput" type="file" accept="video/*" hidden></label>
-        <button id="btnDemo" class="ghost">无摄像头演示</button>
-      </div>
-      <p class="fine">画面只在本机处理，不会上传。首次使用需加载人脸与人像模型（约 4 MB）。</p>
+      <div class="actions"><button id="btnCamera" class="primary">开始</button></div>
+      <input id="fileInput" type="file" accept="video/*" hidden>
     </section>
 
     <section id="done" class="panel" hidden>
@@ -39,10 +33,8 @@
 
     <nav id="bar" hidden>
       <button id="btnBack" class="icon" title="返回" aria-label="返回">←</button>
-      <button id="btnLaugh" class="pill" title="手动触发（空格键）">哈！</button>
       <button id="btnRec" class="rec" title="录制" aria-label="录制"><span></span></button>
-      <button id="btnSound" class="pill" aria-pressed="true">声音 开</button>
-      <button id="btnFlip" class="icon" title="切换摄像头" aria-label="切换摄像头">⟲</button>
+      <span class="icon" aria-hidden="true"></span>
     </nav>
     <div id="toast" role="status" aria-live="polite"></div>
     <div id="progress" hidden><div></div></div>
