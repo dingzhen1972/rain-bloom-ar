@@ -26,10 +26,13 @@ export const THEME = {
   ember: {
     colors: [[255, 190, 90], [255, 190, 90], [255, 140, 60], [255, 244, 225], [255, 170, 120]],
     life: [1.8, 3.0], size: 3.2, halo: 3.6, haloAlpha: 0.26,
+    skyFade: [0.3, 0.68],   // sparkles fade out between these heights (fraction of frame): bright up high, none on the face or chest
   },
   // each raindrop that ignites opens into a tiny golden floret (pre-rendered rays, no extra particles)
   flare: { core: [255, 245, 220], mid: [255, 190, 110], life: 0.42, size: 4.2, rays: 6 },
   mouthGlow: { color: [255, 190, 120], pulseAlpha: 0, laughAlpha: 0 },
+  // water on the lens while it rains: a few drops stick, then slide down leaving a faint trail (≤ max sprites per frame)
+  lens: { max: 12, rate: 3, size: [16, 34] },
   fireworks: {
     colors: {
       gold: [255, 190, 90], amber: [255, 140, 60], white: [255, 244, 225], silver: [205, 220, 255],

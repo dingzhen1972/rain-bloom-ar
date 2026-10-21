@@ -299,6 +299,7 @@ export class ChainRainEffect {
       p.tr.push(p.x, p.y); if (p.tr.length > p.tl * 2) p.tr.splice(0, 2);
     }
     this._debris(dt);
+    this._lensUpdate(dt);
     for (let i = this.smoke.length - 1; i >= 0; i--) { const m = this.smoke[i]; m.age += dt; if (m.age > m.life) { drop(this.smoke, i); continue; } m.x += m.vx * dt; m.y += m.vy * dt; m.r += 6 * S * dt; }
     for (let i = this.flashes.length - 1; i >= 0; i--) { this.flashes[i].age += dt; if (this.flashes[i].age > 1.4) drop(this.flashes, i); }
     for (let i = this.glows.length - 1; i >= 0; i--) { this.glows[i].age += dt; if (this.glows[i].age > this.glows[i].life) drop(this.glows, i); }
@@ -457,6 +458,7 @@ export class ChainRainEffect {
       const R = W * 0.38 * Math.min(1.15, f.s); ctx.globalAlpha = al; ctx.drawImage(this._sprite('soft', f.col), f.x - R, f.y - R, R * 2, R * 2);
     }
     ctx.restore();
+    this._drawLens(ctx);
   }
 
   _hidden(x, y) { return y > this._top(x) + 2 * this.S; }
@@ -620,19 +622,64 @@ export class ChainRainEffect {
     const E = this.theme.ember;
     for (const e of this.embers) {
       if ((e.z < this.zp) !== front || (!front && this._behind(e.x, e.y, frac(e.ph * 3.7)))) continue;
-      const f = 1 - e.age / e.life, tw = 0.6 + 0.4 * Math.sin(this.time * 12 + e.ph * 3), al = Math.min(1, e.age / 0.12) * f * tw;
+      const f = 1 - e.age / e.life, tw = 0.6 + 0.4 * Math.sin(this.time * 12 + e.ph * 3), al = Math.min(1, e.age / 0.12) * f * tw * this._skyFade(e.y);
       if (e.r > 7 * this.S) { c.globalAlpha = al; c.drawImage(this._sprite('disc', e.col), e.x - e.r, e.y - e.r, e.r * 2, e.r * 2); continue; }
       const s = e.r * E.halo * 2; c.globalAlpha = al; c.drawImage(this._sprite('glow', e.col), e.x - s / 2, e.y - s / 2, s, s);
     }
     c.globalAlpha = 1;
   }
+  /** Ignition sparkles live in the sky: full strength high up, gone by the lower part of the frame (no glitter on the face or chest). */
+  // ---- water on the lens: a handful of drops that stick, then slide down leaving a faint trail ----
+  _lensUpdate(dt) {
+    const L = this.theme.lens; if (!L || !L.max) return;
+    if (!this.lens) this.lens = [];
+    const S = this.S, wet = this.state === 'bloom' ? 0 : this.rainLevel, cap = Math.round(L.max * (0.4 + 0.6 * this.quality));
+    if (this.lens.length < cap && this.rand() < dt * L.rate * wet) {
+      this.lens.push({ x: this._r(0.04, 0.96) * this.W, y: this._r(0.02, 0.7) * this.H, y0: 0, r: this._r(L.size[0], L.size[1]) * S, age: 0, stick: this._r(0.6, 2.4), v: 0, ph: this._r(0, 6.28), out: 0 });
+      const d = this.lens[this.lens.length - 1]; d.y0 = d.y;
+    }
+    for (let i = this.lens.length - 1; i >= 0; i--) {
+      const d = this.lens[i]; d.age += dt;
+      if (d.age > d.stick) { d.v = Math.min(d.v + 260 * S * dt, (90 + d.r * 6) * S); d.y += d.v * dt; d.x += Math.sin(d.age * 3 + d.ph) * 6 * S * dt; }
+      if (wet < 0.05 || this.state === 'bloom') d.out += dt;   // dries off when the rain stops or the fireworks start
+      if (d.y - d.r > this.H || d.out > 1) drop(this.lens, i);
+    }
+  }
+  _drawLens(c) {
+    if (!this.lens || !this.lens.length) return;
+    const sp = this._lensSprite();
+    c.save(); c.lineCap = 'round';
+    for (const d of this.lens) {
+      const a = Math.min(1, d.age / 0.25) * (1 - d.out);
+      if (d.y - d.y0 > d.r) {   // trail: thin wet streak above the moving drop
+        c.globalAlpha = a * 0.5; c.strokeStyle = 'rgba(210,225,245,0.18)'; c.lineWidth = d.r * 0.5;
+        c.beginPath(); c.moveTo(d.x, d.y0); c.lineTo(d.x, d.y - d.r * 0.6); c.stroke();
+      }
+      c.globalAlpha = a; c.drawImage(sp, d.x - d.r, d.y - d.r * 1.1, d.r * 2, d.r * 2.2);
+    }
+    c.restore();
+  }
+  _lensSprite() {   // drop on glass: clear body, darker rim, bright highlight (rendered once)
+    if (this._lensSp) return this._lensSp;
+    const c = document.createElement('canvas'); c.width = 64; c.height = 70; const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 38, 4, 32, 36, 30);
+    g.addColorStop(0, 'rgba(235,242,255,0.10)'); g.addColorStop(0.7, 'rgba(200,215,235,0.12)'); g.addColorStop(0.88, 'rgba(10,16,30,0.32)'); g.addColorStop(1, 'rgba(10,16,30,0)');
+    x.fillStyle = g; x.beginPath(); x.ellipse(32, 36, 30, 33, 0, 0, 6.283); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.75)'; x.beginPath(); x.ellipse(23, 24, 6, 4, -0.6, 0, 6.283); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.35)'; x.beginPath(); x.ellipse(40, 52, 7, 2.5, 0.3, 0, 6.283); x.fill();
+    return (this._lensSp = c);
+  }
+
+  _skyFade(y) { const E = this.theme.ember; return 1 - smooth(inv(E.skyFade[0] * this.H, E.skyFade[1] * this.H, y)); }
+
   _drawFlares(c, front) {
     const F = this.theme.flare;
     for (const fl of this.flares) {
       if ((fl.z < this.zp) !== front || (!front && this._hidden(fl.x, fl.y))) continue;
       // opens fast, then fades while the rays drift outward a little
       const k = fl.age / fl.life, r = fl.r * (0.6 + 1.6 * Math.sqrt(k)) * 2.5;
-      c.globalAlpha = Math.min(1, k * 8) * Math.pow(1 - k, 1.4); c.drawImage(this._sprite('floret' + (fl.v || 0), F.mid), fl.x - r, fl.y - r, r * 2, r * 2);
+      const sf = this._skyFade(fl.y); if (sf < 0.02) continue;
+      c.globalAlpha = Math.min(1, k * 8) * Math.pow(1 - k, 1.4) * sf; c.drawImage(this._sprite('floret' + (fl.v || 0), F.mid), fl.x - r, fl.y - r, r * 2, r * 2);
     }
     c.globalAlpha = 1;
   }
