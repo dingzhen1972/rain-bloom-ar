@@ -3,7 +3,7 @@
 直播 / 自拍场景的网页 AR 互动：**微笑时屏幕开始下雨，大笑时雨被点燃、炸成烟花，烟花火花会落到你的头上和肩上并弹开。**
 手机和电脑浏览器打开即用，不装 App，画面全部在本机处理，不上传。
 
-- Live Demo：<https://dingzhen1972.github.io/rain-bloom-ar/>
+- Live Demo：<https://jiahao2002.github.io/rain-bloom-ar/>
 - 实拍测试成片：[demo/clip1_ar.mp4](demo/clip1_ar.mp4)、[demo/clip2_ar.mp4](demo/clip2_ar.mp4)（表情由真实模型自动识别，非手动触发）
 
 ---
@@ -25,7 +25,7 @@
 **GitHub Pages（推荐）**
 1. 新建 **Public** 仓库，上传本文件夹全部内容（含隐藏的 `.github/`、`.nojekyll`）。
 2. Settings → Pages → Source 选 **GitHub Actions**。
-3. 推送到 `main`，等 **Deploy to GitHub Pages** 变绿，打开 <https://dingzhen1972.github.io/rain-bloom-ar/>。
+3. 推送到 `main`，等 **Deploy to GitHub Pages** 变绿，打开 <https://jiahao2002.github.io/rain-bloom-ar/>。
 
 部署时会自动运行 `scripts/fetch-vendor.sh`，把 MediaPipe 的 JS/WASM 和两个模型下载进站点自托管，用户端正常情况下不依赖 jsDelivr 和 Google Storage；运行时若自托管资源不可用，再依次尝试备用 CDN。
 
